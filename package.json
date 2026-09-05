@@ -1,36 +1,25 @@
 {
-  "name": "organisation-tree-workspace",
+  "name": "organisation-tree-demo",
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "tsc -p packages/core && tsc -p packages/organisation && node scripts/copy-manifests.mjs && ng-packagr -p packages/angular/ng-package.json -c packages/angular/tsconfig.json",
-    "test": "tsx --test tests/*.test.ts",
-    "start": "ng serve demo --host 127.0.0.1",
-    "build:demo": "ng build demo",
-    "compat": "node scripts/compat.mjs",
-    "test:browser": "playwright test",
-    "test:compat": "playwright test -c playwright.compat.config.ts",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "start": "ng serve --host 127.0.0.1",
+    "build": "ng build"
+  },
+  "dependencies": {
+    "@angular/common": "15.2.10",
+    "@angular/compiler": "15.2.10",
+    "@angular/core": "15.2.10",
+    "@angular/platform-browser": "15.2.10",
+    "rxjs": "7.8.2",
+    "tslib": "2.8.1",
+    "zone.js": "0.12.0"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "15.2.11",
-    "@angular/animations": "15.2.10",
     "@angular/cli": "15.2.11",
-    "@angular/common": "15.2.10",
-    "@angular/compiler": "15.2.10",
     "@angular/compiler-cli": "15.2.10",
-    "@angular/core": "15.2.10",
-    "@angular/platform-browser": "15.2.10",
-    "@angular/platform-browser-dynamic": "15.2.10",
-    "@playwright/test": "1.55.0",
     "@types/node": "18.19.0",
-    "ng-packagr": "15.2.2",
-    "prettier": "3.6.2",
-    "rxjs": "7.8.2",
-    "tslib": "2.8.1",
-    "tsx": "4.20.5",
-    "typescript": "4.9.5",
-    "zone.js": "0.12.0"
+    "typescript": "4.9.5"
   }
 }

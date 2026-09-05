@@ -1,20 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "module": "ES2020",
     "moduleResolution": "node",
     "strict": true,
-    "declaration": true,
     "skipLibCheck": true,
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2022", "DOM"],
+    "types": [],
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
-    "baseUrl": ".",
-    "paths": {
-      "@organisation-tree/core": ["dist/core"],
-      "@organisation-tree/organisation": ["dist/organisation"],
-      "@organisation-tree/angular": ["dist/angular"]
-    }
+    "outDir": "dist/typescript"
   },
-  "angularCompilerOptions": { "strictTemplates": true }
+  "angularCompilerOptions": { "strictTemplates": true },
+  "files": ["src/main.ts"]
 }

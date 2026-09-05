@@ -1,0 +1,72 @@
+<section *ngIf="helper as state" class="picker" aria-label="Project members">
+  <label class="search-label">
+    Find a person
+    <input
+      type="search"
+      placeholder="Search people…"
+      [value]="searchText"
+      (input)="onSearch($event)"
+    />
+  </label>
+
+  <div class="status" aria-live="polite">
+    <span *ngIf="state.initialLoading || state.searching">Loading…</span>
+    <span *ngIf="state.refreshing">Refreshing membership…</span>
+    <span *ngIf="state.limitReached">Result limit reached; refine your search.</span>
+    <span *ngIf="state.error" class="error">
+      {{ state.error }} <button type="button" (click)="refresh()">Refresh</button>
+    </span>
+  </div>
+
+  <div role="tree" aria-label="Organisation members">
+    <div
+      #row
+      *ngFor="let node of rows; trackBy: trackNode"
+      role="treeitem"
+      [attr.data-node-id]="node.id"
+      [attr.tabindex]="activeId === node.id ? 0 : -1"
+      [attr.aria-level]="level(node)"
+      [attr.aria-posinset]="node.index + 1"
+      [attr.aria-setsize]="node.parent?.children?.length"
+      [attr.aria-expanded]="node.hasChildren ? node.expanded : null"
+      [attr.aria-busy]="node.loading || null"
+      [style.padding-left.px]="(level(node) - 1) * 22 + 8"
+      (focus)="activeId = node.id"
+      (click)="focus(node)"
+      (keydown)="onKeydown($event, node)"
+    >
+      <button
+        class="disclosure"
+        type="button"
+        tabindex="-1"
+        [style.visibility]="node.hasChildren ? 'visible' : 'hidden'"
+        [attr.aria-label]="node.expanded ? 'Collapse' : 'Expand'"
+        (click)="toggleExpansion($event, node)"
+      >
+        {{ node.loading ? '◌' : node.expanded ? '▾' : '▸' }}
+      </button>
+
+      <input
+        *ngIf="!state.query || node.data.kind === 'person'"
+        type="checkbox"
+        tabindex="-1"
+        [checked]="state.state(node) === 'checked'"
+        [indeterminate]="state.state(node) === 'mixed'"
+        [disabled]="state.disabled(node)"
+        [attr.aria-label]="'Project membership for ' + node.data.value.label"
+        (click)="toggleMembership($event, node)"
+      />
+      <span class="node-label">{{ node.data.value.label }}</span>
+      <span class="count" *ngIf="!state.query && node.data.kind !== 'person'">
+        {{ node.data.value.members }} / {{ node.data.value.total }}
+      </span>
+      <span *ngIf="node.error" class="error" role="status">
+        {{ node.error }} <button type="button" (click)="retryLoad($event, node)">Retry</button>
+      </span>
+    </div>
+  </div>
+
+  <p class="empty" *ngIf="!state.initialLoading && !state.searching && !rows.length">
+    {{ state.query ? 'No people found.' : 'No chains to display.' }}
+  </p>
+</section>

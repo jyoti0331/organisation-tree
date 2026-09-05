@@ -1,167 +1,68 @@
-# Organisation tree
+# Organisation tree — copy-paste version
 
-A reusable organisation member picker with a plain TypeScript tree engine, a domain adapter, and Angular rendering. The demo uses an in-memory backend; it makes no production API calls.
+A minimal Angular demo with five reusable tree files. The packaged implementation is preserved on `feature/packaged-tree`; this version is on `feature/copy-paste-tree`.
 
-## Run locally
+## Run
 
 ```sh
-cd /Users/piyushranjan/Developer/Practice/organisation-tree
 nvm install
 nvm use
 npm ci
-npm run build
 npm start
 ```
 
-Open http://127.0.0.1:4200. The base workspace uses Node 18.20.8, Angular 15.2, and TypeScript 4.9 to compile the library for older consumers. It is separate from `PersonalTracker`.
+Open http://127.0.0.1:4200. `npm run build` creates the production application in `dist/demo`. The demo uses Angular 15.2 and Node 18.20.8. The copied component uses APIs compatible with Angular 15–22.
 
-The demo supports configurable latency, failed requests, timeouts after server commits, reordered responses, and a 600-person dataset. The demo search cap is 500; the controller default is 300.
+## Copy into another project
 
-## Packages
+Copy **all five files** from `src/app/tree` into your application:
 
-| Local import                      | Responsibility                                                                                |
-| --------------------------------- | --------------------------------------------------------------------------------------------- |
-| `@organisation-tree/core`         | Generic ordered trees, loading, insertion, reconciliation, visible navigation, subscriptions  |
-| `@organisation-tree/organisation` | Membership rules, backend interface, search, concurrency, reconciliation                      |
-| `@organisation-tree/angular`      | `TreeComponent`, `TriStateComponent`, `OrganisationPickerComponent`, `OrganisationTreeModule` |
+| File                  | Purpose                                                          |
+| --------------------- | ---------------------------------------------------------------- |
+| `tree.component.ts`   | Inputs, rendering state, keyboard/focus handling, lifecycle      |
+| `tree.component.html` | Search, rows, checkboxes, loading/error messages                 |
+| `tree.component.scss` | Self-contained component styles                                  |
+| `tree.helper.ts`      | Tree traversal, lazy loading, membership, search, reconciliation |
+| `tree.model.ts`       | Node models, backend interface, and options                      |
 
-The core and organisation packages have no Angular dependency. The Angular library uses public Angular APIs, partial compilation, Angular peer dependencies, and RxJS 7.5 or later. There is no dependency on Material or an application's services.
+Import the standalone `TreeComponent` in your host component's `imports`, or in an NgModule's `imports`. Implement `OrganisationDataSource` from `tree.model.ts` using your HTTP service, then render:
 
-Build output is in `dist/core`, `dist/organisation`, and `dist/angular`. The demo imports built entry points, not library source files. Packages remain private; publication, public package names, licensing, and a GitHub remote are deferred.
+```html
+<app-tree [dataSource]="memberApi" [projectId]="projectId"></app-tree>
+```
 
-## Embed the picker
-
-Implement `OrganisationDataSource` using your application's existing HTTP and authentication layer. All methods return promises; an Angular HTTP adapter can use RxJS `firstValueFrom`. See [the backend contract](docs/backend-contract.md).
+Optional configuration:
 
 ```ts
-import { Component, Input, OnChanges, OnDestroy } from '@angular/core';
-import { OrganisationPickerComponent } from '@organisation-tree/angular';
-import { OrganisationController, OrganisationDataSource } from '@organisation-tree/organisation';
-
-@Component({
-  selector: 'project-members',
-  standalone: true,
-  imports: [OrganisationPickerComponent],
-  template: ` <ot-organisation-picker [controller]="controller"></ot-organisation-picker> `,
-})
-export class ProjectMembers implements OnChanges, OnDestroy {
-  @Input() projectId!: string;
-  @Input() source!: OrganisationDataSource;
-  controller!: OrganisationController;
-
-  ngOnChanges(): void {
-    this.controller?.dispose();
-    this.controller = new OrganisationController(this.source, this.projectId, {
-      maxResults: 300,
-      timeoutMs: 10_000,
-    });
-  }
-
-  ngOnDestroy(): void {
-    this.controller.dispose();
-  }
-}
+readonly treeOptions = { maxResults: 300, timeoutMs: 10_000 };
 ```
 
-For NgModule applications, import `OrganisationTreeModule` into the module declaring your host component. The host owns the controller lifecycle and dialog presentation. The picker initializes the controller automatically. Create a separate controller per picker/project; changing projects should dispose the old controller.
-
-The Angular adapter explicitly marks change detection inside `NgZone.run`; this works both with zone-based applications and the noop zone used by zoneless applications. It does not install global providers or enable zoneless mode for the host.
-
-Theme the component with inherited CSS custom properties:
-
-```css
-ot-organisation-picker {
-  --ot-accent: #365cdb;
-  --ot-text: #24324a;
-  --ot-border: #dce3ef;
-  --ot-background: #fff;
-  --ot-hover: #f3f6fc;
-}
+```html
+<app-tree [dataSource]="memberApi" [projectId]="projectId" [options]="treeOptions"></app-tree>
 ```
 
-## Use the generic core
+Keep the data-source and options references stable; replacing either, or changing `projectId`, disposes the old helper and starts a new tree. No application services, path aliases, package exports, global CSS, or extra tree components are required. The host owns dialog presentation and supplies its normal Angular change-detection providers; both zone-based and zoneless hosts are supported.
 
-```ts
-import { Tree } from '@organisation-tree/core';
+`src/app/demo` is only an example. Its component contains a small in-memory data source; **do not copy the demo into your production integration**.
 
-const tree = new Tree<{ key: string; label: string }>();
-const [folder] = tree.insertNodesAtRoot([
-  {
-    data: { key: 'folder', label: 'Documents' },
-    hasChildren: true,
-    loader: async (_node, signal) => {
-      const response = await fetch('/documents', { signal });
-      if (!response.ok) throw new Error('Could not load documents');
-      const rows: { id: string; name: string }[] = await response.json();
-      return rows.map((row) => ({ data: { key: row.id, label: row.name } }));
-    },
-  },
-]);
+## Backend and behavior
 
-const unsubscribe = tree.subscribe(() => render(tree.visibleNodes()));
-await tree.expand(folder);
-const next = tree.nextVisibleNode(folder);
-tree.collapse(folder);
-unsubscribe();
-tree.dispose();
-```
+The interface defines six promise-returning operations: get chains, get branches, get branch persons, search persons, toggle a person, and update a branch. Map existing HTTP responses in your adapter. IDs are strings; a person is identified by branch ID plus employee ID. Branch IDs are unique across the organisation.
 
-`render` above represents your renderer. For generic Angular rendering, pass a `Tree<T>` and a row `TemplateRef` to `ot-tree`; handle its `activated` output for Space actions. The optional `expanded` output delegates loading to your adapter; when unobserved the renderer calls `tree.expand` itself.
+Browsing endpoints return full membership counts for ancestors and membership booleans for people. Search returns ordered `{ chain, branch, person }` rows without requiring ancestor counts. Mutation responses contain only `{ chain: { members, total }, branch: { members, total } }`. The mock demonstrates the contract.
 
-Nodes have helper-generated IDs distinct from domain IDs, a parent, a sibling index, children, `hasChildren`, `expanded`, `isLoaded`, `loading`, `error`, and an optional loader. An invisible root joins top-level siblings. The loader closure captures backend parameters and receives an abort signal. Nodes without loaders are already loaded; lazy nodes start collapsed unless configured otherwise.
+- Chain checkboxes are disabled. Branch checkboxes add all, add remaining, or remove all; empty branches are disabled.
+- Membership changes only after API success. Distinct person/branch operations can run concurrently, with conflicting actions locked while pending.
+- The helper reconciles affected counts and people after writes settle and preserves matching row IDs.
+- Expanding loads once; search is debounced by 300 ms and capped at 300 by default. Clearing it restores the browsing tree.
+- Tab enters the tree; arrows navigate/expand/collapse, Space toggles membership, and Home/End jump between endpoints.
 
-`insertChildrenForNode` inserts at a chosen sibling index. `replaceChildren` deliberately discards the old subtree and aborts its pending loads. `reconcileChildren` matches sibling data keys to preserve existing nodes and expansion while updating a flat listing; nested children of matching nodes are retained. Duplicate sibling keys are rejected. `notify` announces an intentional data update. Do not directly splice the node's children or change its index.
+A timeout may occur after the server commits. The helper does not retry toggles automatically; it refreshes and offers error recovery. A commit arriving after reconciliation requires a later refresh. The existing backend contract cannot guarantee immediate resolution of that ambiguity.
 
-## Membership behavior
+Styles use optional `--tree-accent`, `--tree-text`, `--tree-border`, `--tree-background`, and `--tree-hover` CSS custom properties.
 
-- Chain checkboxes are disabled information displays. Branch checkboxes select all, add remaining, or remove all. Empty branches cannot be selected.
-- Person identity is the pair `(branchId, employeeId)`, encoded without delimiter collisions.
-- Each action calls the backend immediately. Membership remains unchanged until success. There is no Save button or automatic retry of toggles.
-- Different branches and distinct people may save concurrently. A branch operation excludes person operations in that branch; duplicate person operations are blocked.
-- Returned counts are provisional if requests overlap. After pending writes settle, the controller re-reads affected counts and person membership. A write starting during reconciliation invalidates that snapshot.
-- Refresh updates loaded listings while preserving matching IDs and expansion, including new employees. The public `refresh()` method also supports externally triggered updates.
-- Search is debounced by 300 ms in the Angular picker. Direct calls to `controller.search()` run immediately. Search uses maps, backend ordering, complete expanded nodes, and no ancestor selection/count display.
-- Clearing search restores the cached browsing tree. Confirmed mutations update cached person representations, and reconciliation refreshes affected memberships.
+## Validation
 
-The implementation intentionally corrects the meeting's all-rows-Tab behavior: there is one roving tree tab stop, arrow navigation, Home/End, Space actions, and focus restoration after collapse. Chain expansion stays available even though its membership checkbox is disabled. See the [WAI-ARIA tree pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/).
+Regression and browser checks run from a temporary workspace to keep this branch minimal. They cover lazy loading, checkbox states, concurrency, search races, timeouts, stable 500-result rendering, focus, and copied-source consumption in Angular 15–22 (standalone and NgModule, plus zoneless in 18–22). The fuller test tooling remains on `feature/packaged-tree`.
 
-## Validate
-
-```sh
-npm run build
-npm test
-npm run build:demo
-npx playwright install chromium
-npm run test:browser
-npm run format:check
-```
-
-The browser suite checks keyboard input, delayed confirmation, failed/timed-out requests, search restoration, and stable row IDs with 500 search results.
-
-For the compatibility matrix, install Node 18.20.8, 22.23.1, and 24.18.0 through nvm, then run:
-
-```sh
-npm run compat
-npm run test:compat
-```
-
-`NODE_18`, `NODE_22`, and `NODE_24` can point to equivalent Node executables when nvm is unavailable. Each generated consumer under `compat/` has its own dependencies, AOT compilation, and Angular linker. Content-addressed local tarballs prevent npm from reusing an older build of the same package version. `npm run compat -- 15 22` rebuilds just those versions; the full browser suite expects all eight fixtures.
-
-See [recorded compatibility results](docs/compatibility.json) for exact versions and standalone, NgModule, and zoneless outcomes. Tests cover one selected patch per major, not every Angular minor or host dependency combination. Angular 18–19 zoneless providers are experimental; Angular 20–22 use their public zoneless provider. Toolchain choices follow [Angular's version table](https://angular.dev/reference/versions).
-
-## Repository identity
-
-This repository is initialized on `main` with:
-
-```sh
-git config --local user.name "Jyoti Shikha"
-git config --local user.email "jyoti.shikha@iyetec.com"
-```
-
-Verify with `git config --local --get user.name` and `git config --local --get user.email`. These values affect commit authorship only in this repository; they do not change global Git identity or authenticate a GitHub account. No remote or commit has been created automatically.
-
-## Current limits
-
-The backend adapter is an interface plus a mock, not a production server. Without backend revisions or a mutation-status endpoint, a timed-out write may commit after reconciliation. No client-only algorithm can establish its final state immediately; refresh after the backend settles. Reads should reflect completed writes. Continuous writes may postpone reconciliation.
-
-The Angular 15 build toolchain necessarily includes legacy dependencies and uses Node 18. Dependency audit findings remain in that isolated development toolchain; the library does not bundle Angular into consuming applications. Upgrade/release policy and a broader browser/screen-reader certification matrix remain future work.
+The legacy Angular 15 development toolchain uses Node 18; consuming applications retain their own Angular dependencies and supported Node toolchains. No npm publication is involved.

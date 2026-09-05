@@ -3,17 +3,17 @@
   "projects": {
     "demo": {
       "projectType": "application",
-      "root": "demo",
-      "sourceRoot": "demo/src",
+      "root": "",
+      "sourceRoot": "src",
       "architect": {
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
             "outputPath": "dist/demo",
-            "index": "demo/src/index.html",
-            "main": "demo/src/main.ts",
-            "tsConfig": "demo/tsconfig.json",
-            "styles": ["demo/src/styles.css"],
+            "index": "src/index.html",
+            "main": "src/main.ts",
+            "polyfills": ["zone.js"],
+            "tsConfig": "tsconfig.json",
             "aot": true
           },
           "configurations": { "production": { "optimization": true, "outputHashing": "all" } },
@@ -27,6 +27,6 @@
     }
   },
   "cli": {
-    "analytics": "d2430cee-6b98-47f4-bcec-a915c9ac65b4"
+    "analytics": "75678734-0cf1-485c-a1e3-c12ee2aa82e2"
   }
 }
