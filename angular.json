@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "projects": {
+    "demo": {
+      "projectType": "application",
+      "root": "demo",
+      "sourceRoot": "demo/src",
+      "architect": {
+        "build": {
+          "builder": "@angular-devkit/build-angular:browser",
+          "options": {
+            "outputPath": "dist/demo",
+            "index": "demo/src/index.html",
+            "main": "demo/src/main.ts",
+            "tsConfig": "demo/tsconfig.json",
+            "styles": ["demo/src/styles.css"],
+            "aot": true
+          },
+          "configurations": { "production": { "optimization": true, "outputHashing": "all" } },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular-devkit/build-angular:dev-server",
+          "options": { "browserTarget": "demo:build" }
+        }
+      }
+    }
+  },
+  "cli": {
+    "analytics": "d2430cee-6b98-47f4-bcec-a915c9ac65b4"
+  }
+}

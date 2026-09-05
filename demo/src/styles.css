@@ -1,0 +1,159 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #f6f8fc;
+  color: #24324a;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+main {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 56px 32px 80px;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  color: #667893;
+}
+h1 {
+  font-size: 48px;
+  line-height: 1.1;
+  letter-spacing: -2px;
+  margin: 22px 0 18px;
+}
+h1 span {
+  color: #365cdb;
+}
+header p {
+  color: #69778d;
+  font-size: 15px;
+  max-width: 500px;
+  line-height: 1.7;
+  margin-bottom: 40px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 36px;
+}
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 14px;
+}
+h2 {
+  font-size: 17px;
+  margin: 0;
+}
+.badge {
+  background: #e8edfc;
+  color: #4261ae;
+  font-size: 11px;
+  padding: 5px 9px;
+  border-radius: 20px;
+}
+aside {
+  padding: 22px;
+  background: #eef2f9;
+  border-radius: 12px;
+  align-self: start;
+}
+aside p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #65728a;
+}
+h3 {
+  font-size: 13px;
+  margin: 20px 0 16px;
+}
+hr {
+  border: 0;
+  border-top: 1px solid #dbe2ee;
+  margin: 22px 0;
+}
+.legend {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  color: #65728a;
+}
+.legend b {
+  color: #365cdb;
+}
+aside label {
+  font-size: 12px;
+  display: block;
+  line-height: 1.7;
+}
+aside label strong {
+  float: right;
+  font-size: 11px;
+  color: #65728a;
+}
+input[type='range'] {
+  width: 100%;
+  accent-color: #365cdb;
+}
+.check {
+  display: flex !important;
+  align-items: center;
+  gap: 5px;
+  margin: 14px 0;
+}
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+.buttons button {
+  font-size: 11px;
+  color: #405574;
+  padding: 8px 10px;
+  border: 1px solid #ced8e8;
+  border-radius: 5px;
+  background: #fff;
+}
+.hint {
+  font-size: 11px !important;
+}
+.footer {
+  font-size: 10px;
+  color: #8190a7;
+  line-height: 1.8;
+  margin-top: 24px;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #365cdb;
+  outline-offset: 2px;
+}
+@media (max-width: 760px) {
+  main {
+    padding: 32px 16px;
+  }
+  h1 {
+    font-size: 38px;
+  }
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  aside {
+    max-width: none;
+  }
+}

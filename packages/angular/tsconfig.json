@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "outDir": "../../dist/angular-ts" },
+  "angularCompilerOptions": { "compilationMode": "partial", "strictTemplates": true },
+  "include": ["src/**/*.ts"]
+}
