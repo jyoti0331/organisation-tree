@@ -62,7 +62,6 @@ export interface OrganisationDataSource {
   getChains(projectId: Id): Promise<Chain[]>;
   getBranches(projectId: Id, chainId: Id): Promise<Branch[]>;
   getBranchPersons(projectId: Id, branchId: Id): Promise<Person[]>;
-  searchPersons(projectId: Id, query: string, maxCount: number): Promise<SearchRow[]>;
   togglePersonMembership(projectId: Id, branchId: Id, employeeId: Id): Promise<MutationResult>;
   updateBranchMembership(
     projectId: Id,
@@ -76,6 +75,11 @@ export type OrganisationNode =
   | { kind: 'person'; value: Person };
 export type CheckState = 'unchecked' | 'mixed' | 'checked';
 export interface PickerOptions {
-  maxResults?: number;
   timeoutMs?: number;
 }
+
+/** Pass this token back unchanged; it belongs to one helper and one search request. */
+export interface SearchRequestToken {
+  readonly membershipGeneration: number;
+}
+export type SearchApplyResult = 'applied' | 'superseded' | 'membership-changed';

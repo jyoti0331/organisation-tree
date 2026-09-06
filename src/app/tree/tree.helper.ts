@@ -10,6 +10,9 @@ import {
   CheckState,
   PickerOptions,
   MutationResult,
+  SearchRow,
+  SearchRequestToken,
+  SearchApplyResult,
 } from './tree.model';
 
 let nextTree = 0;
@@ -214,13 +217,11 @@ export const personKey = (branchId: Id, employeeId: Id): string =>
 export class TreeHelper {
   readonly browsing = new Tree<OrganisationNode>();
   searchTree: Tree<OrganisationNode> | null = null;
-  query = '';
-  searching = false;
+  private searchMode = false;
+  private activeSearch: SearchRequestToken | null = null;
   refreshing = false;
   initialLoading = false;
-  limitReached = false;
   error: string | null = null;
-  readonly maxResults: number;
   readonly timeoutMs: number;
   private listeners = new Set<() => void>();
   private chains = new Map<Id, TreeNode<OrganisationNode>>();
@@ -230,7 +231,6 @@ export class TreeHelper {
   private personWrites = new Map<string, Id>();
   private dirty = new Map<Id, Id>();
   private generation = 0;
-  private searchGeneration = 0;
   private reconcileGeneration = 0;
   private disposed = false;
   private offSearch?: () => void;
@@ -239,12 +239,14 @@ export class TreeHelper {
     readonly projectId: Id,
     options: PickerOptions = {},
   ) {
-    this.maxResults = Math.max(1, Math.floor(options.maxResults ?? 300));
     this.timeoutMs = options.timeoutMs ?? 10000;
     this.browsing.subscribe(() => this.emit());
   }
+  get isSearchMode(): boolean {
+    return this.searchMode;
+  }
   get tree(): Tree<OrganisationNode> {
-    return this.query ? (this.searchTree ?? this.emptySearch()) : this.browsing;
+    return this.isSearchMode ? (this.searchTree ?? this.emptySearch()) : this.browsing;
   }
   private emptySearch(): Tree<OrganisationNode> {
     this.searchTree = new Tree();
@@ -378,7 +380,7 @@ export class TreeHelper {
       this.disposed ||
       this.disabled(node) ||
       node.data.kind === 'chain' ||
-      (this.query && node.data.kind !== 'person')
+      (this.isSearchMode && node.data.kind !== 'person')
     )
       return;
     this.index();
@@ -533,73 +535,70 @@ export class TreeHelper {
       }
     }
   }
-  async search(query: string): Promise<void> {
-    if (this.disposed) return;
-    this.query = query.trim();
-    const token = ++this.searchGeneration;
-    this.limitReached = false;
-    this.error = null;
+  /** The host fetches results; beginning a search invalidates earlier response tokens. */
+  beginSearch(): SearchRequestToken {
+    if (this.disposed) throw new Error('Cannot search a disposed tree helper');
+    this.searchMode = true;
     this.offSearch?.();
     this.searchTree?.dispose();
-    this.searchTree = null;
-    if (!this.query) {
-      this.searching = false;
-      this.emit();
-      if (this.dirty.size) await this.refresh(false);
-      return;
-    }
     this.emptySearch();
-    this.searching = true;
+    this.activeSearch = Object.freeze({ membershipGeneration: this.generation });
+    this.index();
     this.emit();
-    try {
-      const writeGeneration = this.generation;
-      const rows = await this.request(
-        this.source.searchPersons(this.projectId, this.query, this.maxResults),
-      );
-      if (this.disposed || token !== this.searchGeneration) return;
-      if (writeGeneration !== this.generation) {
-        await this.search(this.query);
-        return;
+    return this.activeSearch;
+  }
+
+  /** Build externally fetched rows in backend order without any search API calls. */
+  applySearchResults(rows: readonly SearchRow[], token: SearchRequestToken): SearchApplyResult {
+    if (this.disposed || !this.searchMode || token !== this.activeSearch) return 'superseded';
+    if (token.membershipGeneration !== this.generation) return 'membership-changed';
+    const chains = new Map<Id, NodeInput<OrganisationNode>>();
+    const branches = new Map<Id, NodeInput<OrganisationNode>>();
+    const people = new Set<string>();
+    for (const row of rows) {
+      let chain = chains.get(row.chain.chainId);
+      if (!chain) {
+        chain = { data: { kind: 'chain', value: row.chain }, expanded: true, children: [] };
+        chains.set(row.chain.chainId, chain);
       }
-      this.limitReached = rows.length >= this.maxResults;
-      const chains = new Map<Id, NodeInput<OrganisationNode>>();
-      const branches = new Map<Id, NodeInput<OrganisationNode>>();
-      const people = new Set<string>();
-      for (const row of rows.slice(0, this.maxResults)) {
-        let chain = chains.get(row.chain.chainId);
-        if (!chain) {
-          chain = { data: { kind: 'chain', value: row.chain }, expanded: true, children: [] };
-          chains.set(row.chain.chainId, chain);
-        }
-        let branch = branches.get(row.branch.branchId);
-        if (!branch) {
-          branch = { data: { kind: 'branch', value: row.branch }, expanded: true, children: [] };
-          branches.set(row.branch.branchId, branch);
-          (chain.children as NodeInput<OrganisationNode>[]).push(branch);
-        }
-        const key = personKey(row.person.branchId, row.person.employeeId);
-        if (!people.has(key)) {
-          people.add(key);
-          (branch.children as NodeInput<OrganisationNode>[]).push({
-            data: { kind: 'person', value: row.person },
-          });
-        }
+      let branch = branches.get(row.branch.branchId);
+      if (!branch) {
+        branch = { data: { kind: 'branch', value: row.branch }, expanded: true, children: [] };
+        branches.set(row.branch.branchId, branch);
+        (chain.children as NodeInput<OrganisationNode>[]).push(branch);
       }
-      this.searchTree!.insertNodesAtRoot([...chains.values()]);
-      this.index();
-      if (this.dirty.size && !this.pending) await this.refresh(false);
-    } catch (error) {
-      if (token === this.searchGeneration) this.failure(error);
-    } finally {
-      if (token === this.searchGeneration) {
-        this.searching = false;
-        this.emit();
+      const key = personKey(row.person.branchId, row.person.employeeId);
+      if (!people.has(key)) {
+        people.add(key);
+        (branch.children as NodeInput<OrganisationNode>[]).push({
+          data: { kind: 'person', value: row.person },
+        });
       }
     }
+    this.searchTree!.replaceChildren(this.searchTree!.root, [...chains.values()]);
+    this.activeSearch = null; // A response token can only be consumed once.
+    this.index();
+    this.emit();
+    if (this.dirty.size && !this.pending) void this.refresh(false);
+    return 'applied';
+  }
+
+  /** Return immediately to cached browsing; reconcile outstanding membership if needed. */
+  async restoreBrowsing(): Promise<void> {
+    if (this.disposed) return;
+    this.activeSearch = null;
+    this.searchMode = false;
+    this.offSearch?.();
+    this.offSearch = undefined;
+    this.searchTree?.dispose();
+    this.searchTree = null;
+    this.index();
+    this.emit();
+    if (this.dirty.size) await this.refresh(false);
   }
   dispose(): void {
     this.disposed = true;
-    ++this.searchGeneration;
+    this.activeSearch = null;
     this.browsing.dispose();
     this.searchTree?.dispose();
     this.listeners.clear();

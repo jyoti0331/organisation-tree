@@ -1,4 +1,24 @@
 <main>
   <h1>Project members</h1>
-  <app-tree [dataSource]="dataSource" projectId="demo-project"></app-tree>
+  <label class="search-label">
+    Find a person
+    <input
+      type="search"
+      placeholder="Search people…"
+      [value]="searchText"
+      (input)="onSearch($event)"
+    />
+  </label>
+  <div class="status" aria-live="polite">
+    <span *ngIf="helper.initialLoading || searching">Loading…</span>
+    <span *ngIf="helper.refreshing">Refreshing membership…</span>
+    <span *ngIf="limitReached">Result limit reached; refine your search.</span>
+    <span *ngIf="searchError || helper.error" class="error">
+      {{ searchError || helper.error }} <button type="button" (click)="refresh()">Refresh</button>
+    </span>
+  </div>
+  <app-tree [helper]="helper"></app-tree>
+  <p class="empty" *ngIf="!helper.initialLoading && !searching && !helper.tree.roots.length">
+    {{ helper.isSearchMode ? 'No people found.' : 'No chains to display.' }}
+  </p>
 </main>

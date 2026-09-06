@@ -1,23 +1,4 @@
 <section *ngIf="helper as state" class="picker" aria-label="Project members">
-  <label class="search-label">
-    Find a person
-    <input
-      type="search"
-      placeholder="Search people…"
-      [value]="searchText"
-      (input)="onSearch($event)"
-    />
-  </label>
-
-  <div class="status" aria-live="polite">
-    <span *ngIf="state.initialLoading || state.searching">Loading…</span>
-    <span *ngIf="state.refreshing">Refreshing membership…</span>
-    <span *ngIf="state.limitReached">Result limit reached; refine your search.</span>
-    <span *ngIf="state.error" class="error">
-      {{ state.error }} <button type="button" (click)="refresh()">Refresh</button>
-    </span>
-  </div>
-
   <div role="tree" aria-label="Organisation members">
     <div
       #row
@@ -43,11 +24,11 @@
         [attr.aria-label]="node.expanded ? 'Collapse' : 'Expand'"
         (click)="toggleExpansion($event, node)"
       >
-        {{ node.loading ? '◌' : node.expanded ? '▾' : '▸' }}
+        {{ node.expanded ? 'v' : '>' }}
       </button>
 
       <input
-        *ngIf="!state.query || node.data.kind === 'person'"
+        *ngIf="!state.isSearchMode || node.data.kind === 'person'"
         type="checkbox"
         tabindex="-1"
         [checked]="state.state(node) === 'checked'"
@@ -57,7 +38,7 @@
         (click)="toggleMembership($event, node)"
       />
       <span class="node-label">{{ node.data.value.label }}</span>
-      <span class="count" *ngIf="!state.query && node.data.kind !== 'person'">
+      <span class="count" *ngIf="!state.isSearchMode && node.data.kind !== 'person'">
         {{ node.data.value.members }} / {{ node.data.value.total }}
       </span>
       <span *ngIf="node.error" class="error" role="status">
@@ -65,8 +46,4 @@
       </span>
     </div>
   </div>
-
-  <p class="empty" *ngIf="!state.initialLoading && !state.searching && !rows.length">
-    {{ state.query ? 'No people found.' : 'No chains to display.' }}
-  </p>
 </section>

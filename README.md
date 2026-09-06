@@ -1,6 +1,6 @@
 # Organisation tree — copy-paste version
 
-A minimal Angular demo with five reusable tree files. The packaged implementation is preserved on `feature/packaged-tree`; this version is on `feature/copy-paste-tree`.
+A minimal Angular application with five reusable tree files. The packaged version remains on `feature/packaged-tree`; this version is on `feature/copy-paste-tree`.
 
 ## Run
 
@@ -11,58 +11,80 @@ npm ci
 npm start
 ```
 
-Open http://127.0.0.1:4200. `npm run build` creates the production application in `dist/demo`. The demo uses Angular 15.2 and Node 18.20.8. The copied component uses APIs compatible with Angular 15–22.
+Open http://127.0.0.1:4200. `npm run build` writes the production app to `dist/demo`. The demo uses Angular 15.2 and Node 18.20.8; copied source supports Angular 15–22.
 
-## Copy into another project
+## Copy into your application
 
-Copy **all five files** from `src/app/tree` into your application:
+Copy all five files from `src/app/tree`:
 
-| File                  | Purpose                                                          |
-| --------------------- | ---------------------------------------------------------------- |
-| `tree.component.ts`   | Inputs, rendering state, keyboard/focus handling, lifecycle      |
-| `tree.component.html` | Search, rows, checkboxes, loading/error messages                 |
-| `tree.component.scss` | Self-contained component styles                                  |
-| `tree.helper.ts`      | Tree traversal, lazy loading, membership, search, reconciliation |
-| `tree.model.ts`       | Node models, backend interface, and options                      |
+| File                  | Responsibility                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `tree.component.ts`   | Render subscriptions, expansion, checkbox events, keyboard navigation and focus      |
+| `tree.component.html` | Tree rows and node-level loading/retry feedback                                      |
+| `tree.component.scss` | Local tree styles, green checkboxes and carets                                       |
+| `tree.helper.ts`      | Tree state, lazy loading, membership coordination and external-result reconstruction |
+| `tree.model.ts`       | Node types, backend interface, options and search tokens                             |
 
-Import the standalone `TreeComponent` in your host component's `imports`, or in an NgModule's `imports`. Implement `OrganisationDataSource` from `tree.model.ts` using your HTTP service, then render:
-
-```html
-<app-tree [dataSource]="memberApi" [projectId]="projectId"></app-tree>
-```
-
-Optional configuration:
+Import the standalone `TreeComponent` into your host component or NgModule. The host creates and owns the helper:
 
 ```ts
-readonly treeOptions = { maxResults: 300, timeoutMs: 10_000 };
+import { TreeHelper } from './tree/tree.helper';
+
+// memberApi implements OrganisationDataSource from tree.model.ts.
+readonly helper = new TreeHelper(this.memberApi, this.projectId, { timeoutMs: 10_000 });
+
+ngOnInit(): void { void this.helper.initialize(); }
+ngOnDestroy(): void { this.helper.dispose(); }
 ```
 
 ```html
-<app-tree [dataSource]="memberApi" [projectId]="projectId" [options]="treeOptions"></app-tree>
+<app-tree [helper]="helper"></app-tree>
 ```
 
-Keep the data-source and options references stable; replacing either, or changing `projectId`, disposes the old helper and starts a new tree. No application services, path aliases, package exports, global CSS, or extra tree components are required. The host owns dialog presentation and supplies its normal Angular change-detection providers; both zone-based and zoneless hosts are supported.
+The renderer subscribes to helper changes but never initializes or disposes a supplied helper. To change projects, the host disposes the old helper and passes a new one. It owns all search controls, page-level status/error/empty messages, and refresh buttons. `src/app/demo` demonstrates this integration; do not copy the demo's mock backend into production.
 
-`src/app/demo` is only an example. Its component contains a small in-memory data source; **do not copy the demo into your production integration**.
+The five files use relative imports and Angular APIs only—no path aliases, package exports, application-specific services, global CSS or additional tree components. Zone-based and zoneless hosts retain their normal Angular providers.
 
-## Backend and behavior
+## External search
 
-The interface defines six promise-returning operations: get chains, get branches, get branch persons, search persons, toggle a person, and update a branch. Map existing HTTP responses in your adapter. IDs are strings; a person is identified by branch ID plus employee ID. Branch IDs are unique across the organisation.
+The helper never calls a search API and does not store query text, debounce timers or result limits. Search is optional for hosts that only need browsing.
 
-Browsing endpoints return full membership counts for ancestors and membership booleans for people. Search returns ordered `{ chain, branch, person }` rows without requiring ancestor counts. Mutation responses contain only `{ chain: { members, total }, branch: { members, total } }`. The mock demonstrates the contract.
+```ts
+const token = helper.beginSearch();
+const rows = await memberApi.searchPersons(projectId, query, limit);
+const outcome = helper.applySearchResults(rows, token);
+```
 
-- Chain checkboxes are disabled. Branch checkboxes add all, add remaining, or remove all; empty branches are disabled.
-- Membership changes only after API success. Distinct person/branch operations can run concurrently, with conflicting actions locked while pending.
-- The helper reconciles affected counts and people after writes settle and preserves matching row IDs.
-- Expanding loads once; search is debounced by 300 ms and capped at 300 by default. Clearing it restores the browsing tree.
-- Tab enters the tree; arrows navigate/expand/collapse, Space toggles membership, and Home/End jump between endpoints.
+`beginSearch()` enters search mode and clears previous results. `applySearchResults()` creates a complete, expanded tree from externally fetched rows using maps, preserving backend order. It returns:
 
-A timeout may occur after the server commits. The helper does not retry toggles automatically; it refreshes and offers error recovery. A commit arriving after reconciliation requires a later refresh. The existing backend contract cannot guarantee immediate resolution of that ambiguity.
+- `applied`: the rows were installed. The token is consumed once.
+- `superseded`: the token is outdated, belongs to another helper, was already used, or the helper was disposed.
+- `membership-changed`: a membership write started or finished after the request began; the host should fetch fresh rows with a new token.
 
-Styles use optional `--tree-accent`, `--tree-text`, `--tree-border`, `--tree-background`, and `--tree-hover` CSS custom properties.
+The host must also ignore callbacks from superseded queries. The demo implements the complete sequence with a 300 ms debounce, a ten-second search timeout, a default cap of 300, and retries for membership invalidation. It slices results to the cap and displays “Result limit reached; refine your search” when the response reaches it. These are host choices, not renderer requirements.
+
+To clear search, invalidate the host's pending requests and call:
+
+```ts
+await helper.restoreBrowsing();
+```
+
+Browsing becomes visible immediately, with matching node IDs and expansion preserved. The returned promise covers any needed membership reconciliation. Search ancestors have no checkboxes or counts; people remain selectable.
+
+## Backend and interaction contract
+
+`OrganisationDataSource` requires five promise-returning operations: get chains, get branches, get branch persons, toggle a person, and update a branch. The helper retains these calls for lazy loading and membership updates. A host can separately supply its own `searchPersons` method without making it part of the required interface.
+
+IDs are strings. Branch IDs are unique across the organisation; a person is identified by `(branchId, employeeId)`. Browsing ancestor rows include full `members` and `total` counts. Search rows contain `{ chain, branch, person }` identities and person membership, with no ancestor counts required. Mutation results contain `{ chain: { members, total }, branch: { members, total } }`.
+
+Chain checkboxes are disabled information displays. Branch actions add all, add remaining, or remove all. Membership changes only after API success; conflicting controls are disabled while saving. Distinct operations may run concurrently, followed by authoritative reconciliation without rebuilding matching browsing nodes.
+
+Checkboxes use `rgb(50, 150, 70)`; disabled states retain that base color with reduced opacity. Collapsed nodes display `>` and expanded nodes display `v`, including during loading. Native checkbox semantics and forced-colors support are preserved. Tab enters the tree, arrows navigate, Space toggles membership, and Home/End jump between endpoints.
+
+A timed-out toggle may still commit on the server. It is never automatically retried. Reconciliation and explicit refresh recover known state, but a commit arriving after those reads needs a later refresh. Immediate certainty requires backend capabilities beyond this contract.
 
 ## Validation
 
-Regression and browser checks run from a temporary workspace to keep this branch minimal. They cover lazy loading, checkbox states, concurrency, search races, timeouts, stable 500-result rendering, focus, and copied-source consumption in Angular 15–22 (standalone and NgModule, plus zoneless in 18–22). The fuller test tooling remains on `feature/packaged-tree`.
+Tests run in a temporary workspace to keep this branch minimal. Coverage includes external-search races and timeout recovery, helper ownership/disposal, checkbox states, concurrent writes, keyboard focus, 500-result rendering, and copied-source consumption in Angular 15–22 (standalone/NgModule, plus zoneless in 18–22). The fuller original test tooling remains on `feature/packaged-tree`.
 
-The legacy Angular 15 development toolchain uses Node 18; consuming applications retain their own Angular dependencies and supported Node toolchains. No npm publication is involved.
+The Angular 15 development toolchain uses Node 18; consuming applications retain their own Angular dependencies and compatible Node toolchains. No npm publication is involved.

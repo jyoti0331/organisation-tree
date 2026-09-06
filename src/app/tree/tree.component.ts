@@ -13,7 +13,7 @@ import {
   ViewChildren,
 } from '@angular/core';
 import { TreeHelper } from './tree.helper';
-import { OrganisationDataSource, OrganisationNode, PickerOptions, TreeNode } from './tree.model';
+import { OrganisationNode, TreeNode } from './tree.model';
 
 @Component({
   selector: 'app-tree',
@@ -24,17 +24,12 @@ import { OrganisationDataSource, OrganisationNode, PickerOptions, TreeNode } fro
   styleUrls: ['./tree.component.scss'],
 })
 export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
-  @Input() dataSource!: OrganisationDataSource;
-  @Input() projectId!: string;
-  @Input() options: PickerOptions = {};
+  @Input() helper: TreeHelper | null = null;
   @ViewChildren('row') private rowElements!: QueryList<ElementRef<HTMLElement>>;
 
-  helper: TreeHelper | null = null;
   rows: TreeNode<OrganisationNode>[] = [];
-  searchText = '';
   activeId = '';
   private unsubscribe?: () => void;
-  private searchTimer?: ReturnType<typeof setTimeout>;
   private pendingFocus = false;
 
   constructor(
@@ -43,19 +38,14 @@ export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
   ) {}
 
   ngOnChanges(): void {
-    clearTimeout(this.searchTimer);
     this.unsubscribe?.();
-    this.helper?.dispose();
-    this.helper = null;
-    this.rows = [];
-    this.searchText = '';
-    this.activeId = '';
-    if (!this.dataSource || this.projectId == null) return;
-
-    this.helper = new TreeHelper(this.dataSource, this.projectId, this.options);
+    if (!this.helper) {
+      this.rows = [];
+      this.activeId = '';
+      return;
+    }
     this.unsubscribe = this.helper.subscribe(() => this.zone.run(() => this.updateRows()));
     this.updateRows();
-    void this.helper.initialize();
   }
 
   private updateRows(): void {
@@ -109,13 +99,6 @@ export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
     }
   }
 
-  onSearch(event: Event): void {
-    this.searchText = (event.target as HTMLInputElement).value;
-    clearTimeout(this.searchTimer);
-    if (!this.searchText.trim()) void this.helper?.search('');
-    else this.searchTimer = setTimeout(() => void this.helper?.search(this.searchText), 300);
-  }
-
   toggleMembership(event: MouseEvent, node: TreeNode<OrganisationNode>): void {
     // Cancel the browser's checkbox toggle: only the confirmed API response changes it.
     event.preventDefault();
@@ -135,13 +118,6 @@ export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
     event.stopPropagation();
     this.focus(node);
     void this.helper?.expand(node);
-  }
-
-  async refresh(): Promise<void> {
-    if (!this.helper) return;
-    if (!this.helper.browsing.roots.length) await this.helper.initialize();
-    else if (this.helper.query) await this.helper.search(this.helper.query);
-    else await this.helper.refresh();
   }
 
   onKeydown(event: KeyboardEvent, node: TreeNode<OrganisationNode>): void {
@@ -180,8 +156,6 @@ export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
   }
 
   ngOnDestroy(): void {
-    clearTimeout(this.searchTimer);
     this.unsubscribe?.();
-    this.helper?.dispose();
   }
 }
