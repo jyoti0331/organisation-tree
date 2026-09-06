@@ -34,22 +34,27 @@ flowchart TD
 
 ## 2. File map and reading order
 
-| File                                                                 | Responsibility and reason for existing                                                                                                                                       |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [tree.model.ts](src/app/tree/tree.model.ts)                          | Generic contracts shared by the helper, renderer and host. Start here.                                                                                                       |
-| [tree.helper.ts](src/app/tree/tree.helper.ts)                        | Plain TypeScript `Tree<T>` and `TreeHelper<T>`. Structural operations stay independent of Angular.                                                                           |
-| [tree.component.ts](src/app/tree/tree.component.ts)                  | Angular bindings, subscriptions, checkbox events and focus. DOM references stay here.                                                                                        |
-| [tree.component.html](src/app/tree/tree.component.html)              | Flat list of visible rows with tree semantics, indentation, carets, optional checkboxes/descriptions and node errors/retry.                                                  |
-| [tree.component.scss](src/app/tree/tree.component.scss)              | Local row layout, focus styles and checkbox appearance.                                                                                                                      |
-| [demo.component.ts](src/app/demo/demo.component.ts)                  | Application types, `OrganisationController`, `DemoDataSource` and `DemoComponent`. Domain logic lives here to keep the five copied files generic and the demo project small. |
-| [demo.component.html](src/app/demo/demo.component.html)              | Heading, external search, page-level statuses/errors, tree bindings and empty-result message.                                                                                |
-| [demo.component.scss](src/app/demo/demo.component.scss)              | Page and search layout, separate from reusable row styling.                                                                                                                  |
-| [main.ts](src/main.ts)                                               | Bootstraps the standalone demo component.                                                                                                                                    |
-| [index.html](src/index.html)                                         | Browser document and root element.                                                                                                                                           |
-| [angular.json](angular.json)                                         | One application's build/serve configuration, entry points, Zone.js and output directory.                                                                                     |
-| [tsconfig.json](tsconfig.json)                                       | Strict TypeScript/template checking and compilation entry point.                                                                                                             |
-| [package.json](package.json), [package-lock.json](package-lock.json) | Start/build commands and pinned dependencies. The project is private.                                                                                                        |
-| [.nvmrc](.nvmrc), [.gitignore](.gitignore)                           | Demo Node version and exclusions for generated/dependency files.                                                                                                             |
+| File                                                                    | Responsibility and reason for existing                                                                                      |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| [tree.model.ts](src/app/tree/tree.model.ts)                             | Generic contracts shared by the helper, renderer and host. Start here.                                                      |
+| [tree.helper.ts](src/app/tree/tree.helper.ts)                           | Plain TypeScript `Tree<T>` and `TreeHelper<T>`. Structural operations stay independent of Angular.                          |
+| [tree.component.ts](src/app/tree/tree.component.ts)                     | Angular bindings, subscriptions, checkbox events and focus. DOM references stay here.                                       |
+| [tree.component.html](src/app/tree/tree.component.html)                 | Flat list of visible rows with tree semantics, indentation, carets, optional checkboxes/descriptions and node errors/retry. |
+| [tree.component.scss](src/app/tree/tree.component.scss)                 | Local row layout, focus styles and checkbox appearance.                                                                     |
+| [demo.component.ts](src/app/demo/demo.component.ts)                     | `DemoComponent` only: page lifecycle, external search coordination and status.                                              |
+| [organisation.model.ts](src/app/demo/organisation.model.ts)             | Domain record types, mutation results and controller options.                                                               |
+| [organisation-data-source.ts](src/app/demo/organisation-data-source.ts) | Backend listing/mutation interface, independent of its implementation.                                                      |
+| [organisation.controller.ts](src/app/demo/organisation.controller.ts)   | `OrganisationController`: membership rules, concurrent writes, reconciliation and domain-to-tree mapping.                   |
+| [membership.utils.ts](src/app/demo/membership.utils.ts)                 | Pure count-to-checkbox and compound-person-key functions.                                                                   |
+| [demo-data-source.ts](src/app/demo/demo-data-source.ts)                 | `DemoDataSource`: in-memory backend implementation for the demo.                                                            |
+| [demo.component.html](src/app/demo/demo.component.html)                 | Heading, external search, page-level statuses/errors, tree bindings and empty-result message.                               |
+| [demo.component.scss](src/app/demo/demo.component.scss)                 | Page and search layout, separate from reusable row styling.                                                                 |
+| [main.ts](src/main.ts)                                                  | Bootstraps the standalone demo component.                                                                                   |
+| [index.html](src/index.html)                                            | Browser document and root element.                                                                                          |
+| [angular.json](angular.json)                                            | One application's build/serve configuration, entry points, Zone.js and output directory.                                    |
+| [tsconfig.json](tsconfig.json)                                          | Strict TypeScript/template checking and compilation entry point.                                                            |
+| [package.json](package.json), [package-lock.json](package-lock.json)    | Start/build commands and pinned dependencies. The project is private.                                                       |
+| [.nvmrc](.nvmrc), [.gitignore](.gitignore)                              | Demo Node version and exclusions for generated/dependency files.                                                            |
 
 ## 3. Models: input descriptions versus live nodes
 
@@ -196,7 +201,7 @@ The generic event includes `checked`. This particular demo passes only `$event.n
 
 ## 8. Demo-only types and controller reference
 
-All entries in this section live in `demo.component.ts`; none are requirements of the reusable tree.
+Domain types live in `organisation.model.ts`, the backend contract in `organisation-data-source.ts`, pure functions in `membership.utils.ts`, and the controller in `organisation.controller.ts`. None are requirements of the reusable tree.
 
 | Type/function                           | Purpose                                                                                                                               |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -251,7 +256,7 @@ Backend expectations: branch IDs are unique within the organisation; search rows
 
 ## 9. Host component and mock reference
 
-### `DemoComponent`
+### `DemoComponent` (`demo.component.ts`)
 
 | Members                                                  | Purpose                                                                                                   |
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -268,7 +273,7 @@ Backend expectations: branch IDs are unique within the organisation; search rows
 | `refresh()`                                              | Retry/refresh the current search, or initialize/refresh browsing.                                         |
 | `ngOnDestroy()`                                          | Invalidate queries, clear timer, unsubscribe and dispose controller/helper.                               |
 
-### `DemoDataSource`
+### `DemoDataSource` (`demo-data-source.ts`)
 
 | Members                                              | Purpose                                                                                                 |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -285,14 +290,14 @@ The mock accepts but does not partition storage by `projectId`. It is sample tra
 
 ## 10. Where to change things later
 
-| Desired change                          | Start here                                                                                         |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| New payload/hierarchy/backend           | Host models, input mapping, loaders and presentation; keep the five tree files domain-independent. |
-| New checkbox business rule              | Host checkbox descriptor and event handler.                                                        |
-| Search UI/debounce/grouping/limits      | Host component/controller. Generic helper accepts already-built hierarchies.                       |
-| Node identity, loading cache, traversal | `Tree<T>`; preserve parent/index and stale-response rules.                                         |
-| Search switching/token semantics        | `TreeHelper<T>` and host token handling.                                                           |
-| Keyboard/focus/row rendering            | `TreeComponent<T>` and its HTML.                                                                   |
-| Checkbox/caret/row appearance           | Tree SCSS/HTML; page styles remain in demo SCSS.                                                   |
+| Desired change                          | Start here                                                                                                                                         |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New payload/hierarchy/backend           | `organisation.model.ts`, the data-source contract/implementation and controller mapping/presentation; keep the five tree files domain-independent. |
+| New checkbox business rule              | Host checkbox descriptor and event handler.                                                                                                        |
+| Search UI/debounce/grouping/limits      | Host component/controller. Generic helper accepts already-built hierarchies.                                                                       |
+| Node identity, loading cache, traversal | `Tree<T>`; preserve parent/index and stale-response rules.                                                                                         |
+| Search switching/token semantics        | `TreeHelper<T>` and host token handling.                                                                                                           |
+| Keyboard/focus/row rendering            | `TreeComponent<T>` and its HTML.                                                                                                                   |
+| Checkbox/caret/row appearance           | Tree SCSS/HTML; page styles remain in demo SCSS.                                                                                                   |
 
 After a behavior change, update the matching section of this guide and the quick-start README example. Documentation-only edits need link/content checks; implementation changes need relevant regression checks. Test tooling currently runs outside this minimal branch; the earlier validation covered unit behavior, browser interaction and isolated Angular 15–22 consumers. Do not treat past results as validation of future code changes.

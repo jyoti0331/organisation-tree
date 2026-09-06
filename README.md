@@ -84,7 +84,7 @@ When clearing search, invalidate host request callbacks and call `helper.restore
 | `tree.component.html` | Rows and node-level retry feedback                                           |
 | `tree.component.scss` | Local styling, green native checkboxes and caret symbols                     |
 
-The organisation example lives entirely in `src/app/demo`: its own types, data-source contract, membership controller, mock API and search grouping. It retains disabled chain checkboxes, branch actions, concurrent person writes, reconciliation and timeout recovery. Copy that application logic only if your application needs this particular membership behavior. Timed-out mutations are not retried automatically; a late server commit may require a later refresh.
+The organisation example lives entirely in `src/app/demo`: separate files for domain models, the data-source contract, membership utilities, the membership controller and the mock API. `demo.component.ts` contains only the host component and external search coordination. It retains disabled chain checkboxes, branch actions, concurrent person writes, reconciliation and timeout recovery. Copy that application logic only if your application needs this particular membership behavior. Timed-out mutations are not retried automatically; a late server commit may require a later refresh.
 
 Checkboxes use `rgb(50, 150, 70)` with muted disabled states. Carets remain literal `>` / `v`, including while loading. One roving Tab stop, arrow keys, Home/End and Space support keyboard navigation. Search and page-level messages remain outside the tree.
 
