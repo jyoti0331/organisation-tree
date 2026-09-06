@@ -1,49 +1,14 @@
-<section *ngIf="helper as state" class="picker" [attr.aria-label]="label">
-  <div role="tree" [attr.aria-label]="label">
-    <div
-      #row
-      *ngFor="let node of rows; trackBy: trackNode"
-      role="treeitem"
-      [attr.data-node-id]="node.id"
-      [attr.tabindex]="activeId === node.id ? 0 : -1"
-      [attr.aria-level]="level(node)"
-      [attr.aria-posinset]="node.index + 1"
-      [attr.aria-setsize]="node.parent?.children?.length"
-      [attr.aria-expanded]="node.hasChildren ? node.expanded : null"
-      [attr.aria-busy]="node.loading || null"
-      [style.padding-left.px]="(level(node) - 1) * 22 + 8"
-      (focus)="onRowFocus(node)"
-      (click)="focus(node)"
-      (keydown)="onKeydown($event, node)"
-    >
-      <button
-        class="disclosure"
-        type="button"
-        tabindex="-1"
-        [style.visibility]="node.hasChildren ? 'visible' : 'hidden'"
-        [attr.aria-label]="node.expanded ? 'Collapse' : 'Expand'"
-        (click)="toggleExpansion($event, node)"
-      >
-        {{ node.expanded ? 'v' : '>' }}
-      </button>
-
-      <input
-        *ngIf="presentation.checkbox?.(node) as checkbox"
-        type="checkbox"
-        tabindex="-1"
-        [checked]="checkbox.state === 'checked'"
-        [indeterminate]="checkbox.state === 'mixed'"
-        [disabled]="checkbox.disabled"
-        [attr.aria-label]="checkbox.label || presentation.label(node)"
-        (click)="toggleCheckbox($event, node)"
-      />
-      <span class="node-label">{{ presentation.label(node) }}</span>
-      <span class="count" *ngIf="presentation.description?.(node) as description">
-        {{ description }}
-      </span>
-      <span *ngIf="node.error" class="error" role="status">
-        {{ node.error }} <button type="button" (click)="retryLoad($event, node)">Retry</button>
-      </span>
-    </div>
-  </div>
+<section class="picker" [attr.aria-label]="label">
+  <ul class="tree-list" [attr.aria-label]="label">
+    <ng-container *ngTemplateOutlet="treeTemplate; context: { $implicit: nodes, depth: 0 }"></ng-container>
+  </ul>
 </section>
+
+<ng-template #treeTemplate let-items let-depth="depth">
+  <li *ngFor="let node of items; trackBy: trackNode">
+    <ws-tree-row [node]="node" [depth]="depth" (expand)="onExpand($event)" (selectionChange)="onCheckboxChange($event)"></ws-tree-row>
+    <ul *ngIf="node.expanded && node.children?.length" class="tree-list">
+      <ng-container *ngTemplateOutlet="treeTemplate; context: { $implicit: node.children, depth: depth + 1 }"></ng-container>
+    </ul>
+  </li>
+</ng-template>

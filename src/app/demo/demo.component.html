@@ -2,27 +2,24 @@
   <h1>Project members</h1>
   <label class="search-label">
     Find a person
-    <input
-      type="search"
-      placeholder="Search people…"
-      [value]="searchText"
-      (input)="onSearch($event)"
-    />
+    <input type="search" placeholder="Search people…" [value]="searchTerm"
+      [disabled]="!addProjectMemberService.selectionReady" (input)="onSearchInput($event)" />
   </label>
+  <button *ngIf="searchMode" type="button" (click)="clearSearch()">Clear search</button>
   <div class="status" aria-live="polite">
-    <span *ngIf="helper.initialLoading || searching">Loading…</span>
-    <span *ngIf="helper.refreshing">Refreshing membership…</span>
-    <span *ngIf="limitReached">Result limit reached; refine your search.</span>
-    <span *ngIf="searchError || helper.error" class="error">
-      {{ searchError || helper.error }} <button type="button" (click)="refresh()">Refresh</button>
+    <span *ngIf="treeRoot.loading || searching">Loading…</span>
+    <span *ngIf="searchMode && searchTooManyResults">Too many results. Please refine your search.</span>
+    <span *ngIf="treeRoot.error" class="error">
+      {{ treeRoot.error }} <button type="button" (click)="retryInitialization()">Retry</button>
+    </span>
+    <span *ngIf="searchError" class="error">
+      {{ searchError }} <button type="button" (click)="retrySearch()">Retry search</button>
     </span>
   </div>
-  <app-tree
-    [helper]="helper.helper"
-    [presentation]="helper.presentation"
-    (checkboxToggle)="helper.toggle($event.node)"
-  ></app-tree>
-  <p class="empty" *ngIf="!helper.initialLoading && !searching && !helper.tree.roots.length">
-    {{ helper.isSearchMode ? 'No people found.' : 'No chains to display.' }}
+  <ws-tree [nodes]="treeNodes" label="Project members"
+    (expand)="onNodeExpand($event)" (selectionChange)="onSelectionChange($event)">
+  </ws-tree>
+  <p class="empty" *ngIf="!treeRoot.loading && !searching && !treeRoot.error && !searchError && !treeNodes.length">
+    {{ searchMode ? 'No people found.' : 'No chains to display.' }}
   </p>
 </main>

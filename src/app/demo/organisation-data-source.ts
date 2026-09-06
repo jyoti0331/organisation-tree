@@ -1,14 +1,15 @@
-import { Id, Chain, Branch, Person, MutationResult, BranchAction } from './organisation.model';
+import { Observable } from 'rxjs';
+import {
+  BranchMembershipRecord, ChainRecord, EmployeeMembershipRecord,
+  EmployeeSearchResponse, MembershipResponse,
+} from './organisation.model';
 
-/** Host supplies transport/authentication. Counts describe the full organisation, never search subsets. */
-export interface OrganisationDataSource {
-  getChains(projectId: Id): Promise<Chain[]>;
-  getBranches(projectId: Id, chainId: Id): Promise<Branch[]>;
-  getBranchPersons(projectId: Id, branchId: Id): Promise<Person[]>;
-  togglePersonMembership(projectId: Id, branchId: Id, employeeId: Id): Promise<MutationResult>;
-  updateBranchMembership(
-    projectId: Id,
-    branchId: Id,
-    action: BranchAction,
-  ): Promise<MutationResult>;
+/** Counts and membership are authoritative; an adapter is scoped to one project. */
+export abstract class OrganisationDataSource {
+  abstract getChains(): Observable<ChainRecord[]>;
+  abstract getBranches(chainId: string): Observable<BranchMembershipRecord[]>;
+  abstract getEmployees(branchId: string): Observable<EmployeeMembershipRecord[]>;
+  abstract searchEmployees(term: string, maxCount: number): Observable<EmployeeSearchResponse>;
+  abstract setPersonMembership(branchId: string, employeeId: string, isProjectMember: boolean): Observable<MembershipResponse>;
+  abstract setBranchMembership(branchId: string, isProjectMember: boolean): Observable<MembershipResponse>;
 }

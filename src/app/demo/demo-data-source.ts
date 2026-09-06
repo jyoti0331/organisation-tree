@@ -1,368 +1,363 @@
-import {
-  Id,
-  Counts,
-  Chain,
-  Branch,
-  Person,
-  SearchRow,
-  MutationResult,
-  BranchAction,
-} from './organisation.model';
+import { Injectable } from '@angular/core';
+import { Observable, timer, map } from 'rxjs';
 import { OrganisationDataSource } from './organisation-data-source';
-/** Replace this mock with your application's HTTP adapter. */
-export class DemoDataSource implements OrganisationDataSource {
-  private readonly chains = [
-    { chainId: 'north', label: 'Northern group' },
-    { chainId: 'south', label: 'Southern group' },
-  ];
-  private readonly branches = [
-    { branchId: 'it', chainId: 'north', label: '1030 IT' },
-    { branchId: 'operations', chainId: 'north', label: 'Operations' },
-    { branchId: 'support', chainId: 'south', label: 'Customer support' },
-  ];
-  private readonly persons: Person[] = this.branches.flatMap((branch) => {
-    console.log(
-      "[tree-debug] DemoDataSource callback | evaluate ['Alex Andersen', 'Jamie Berg', 'Morgan Hansen', 'Sam Olsen'].map((label, index) => ({ branchId: branch.branchId, employeeId: String(index), label, is",
-      { branch },
-    );
-    debugger;
-    return ['Alex Andersen', 'Jamie Berg', 'Morgan Hansen', 'Sam Olsen'].map((label, index) => {
-      console.log(
-        '[tree-debug] DemoDataSource callback callback | evaluate ({ branchId: branch.branchId, employeeId: String(index), label, isProjectMember: index === 0, })',
-        { label, index },
-      );
-      debugger;
-      return {
-        branchId: branch.branchId,
-        employeeId: String(index),
-        label,
-        isProjectMember: index === 0,
-      };
-    });
-  });
-  private counts(persons: Person[]): Counts {
-    console.log('[tree-debug] DemoDataSource.counts | enter', { persons });
-    debugger;
-    console.log(
-      '[tree-debug] DemoDataSource.counts | return { total: persons.length, members: persons.filter((person) => person.isProjectMember).length, };',
-    );
-    debugger;
-    return {
-      total: persons.length,
-      members: persons.filter((person) => {
-        console.log(
-          '[tree-debug] DemoDataSource.counts callback | evaluate person.isProjectMember',
-          { person },
-        );
-        debugger;
-        return person.isProjectMember;
-      }).length,
-    };
+import {
+  BranchRecord, EmployeeRecord, FakeDataShape, FakeSearchResult, ChainRecord,
+  BranchMembershipRecord, EmployeeMembershipRecord, EmployeeSearchResponse, MembershipResponse,
+} from './organisation.model';
+
+@Injectable()
+export class WeekViewFakeDataService extends OrganisationDataSource {
+  private readonly members = new Set<string>();
+
+  /** Work happens when the response completes, and cancellation prevents the fake write. */
+  private respond<T>(operation: () => T): Observable<T> {
+    return timer(150).pipe(map(() => structuredClone(operation())));
   }
-  private chainRows(): Chain[] {
-    console.log('[tree-debug] DemoDataSource.chainRows | enter');
-    debugger;
-    console.log(
-      '[tree-debug] DemoDataSource.chainRows | return this.chains.map((chain) => { const branchIds = new Set( this.branches .filter((branch) => branch.chainId === chain.chainId) .map((branch) => br',
-    );
-    debugger;
-    return this.chains.map((chain) => {
-      console.log('[tree-debug] DemoDataSource.chainRows callback | enter', { chain });
-      debugger;
-      console.log(
-        '[tree-debug] DemoDataSource.chainRows callback | const branchIds = new Set( this.branches .filter((branch) => branch.chainId === chain.chainId) .map((branch) => branch.branchId), );',
-      );
-      debugger;
-      const branchIds = new Set(
-        this.branches
-          .filter((branch) => {
-            console.log(
-              '[tree-debug] DemoDataSource.chainRows callback callback | evaluate branch.chainId === chain.chainId',
-              { branch },
-            );
-            debugger;
-            return branch.chainId === chain.chainId;
-          })
-          .map((branch) => {
-            console.log(
-              '[tree-debug] DemoDataSource.chainRows callback callback | evaluate branch.branchId',
-              { branch },
-            );
-            debugger;
-            return branch.branchId;
-          }),
-      );
-      console.log(
-        '[tree-debug] DemoDataSource.chainRows callback | return { ...chain, ...this.counts(this.persons.filter((person) => branchIds.has(person.branchId))), };',
-      );
-      debugger;
-      return {
-        ...chain,
-        ...this.counts(
-          this.persons.filter((person) => {
-            console.log(
-              '[tree-debug] DemoDataSource.chainRows callback callback | evaluate branchIds.has(person.branchId)',
-              { person },
-            );
-            debugger;
-            return branchIds.has(person.branchId);
-          }),
-        ),
-      };
-    });
+
+  getChains(): Observable<ChainRecord[]> {
+    return this.respond(() => this.chainData.map(chain => ({ ...chain, ...this.chainCounts(chain.id) })));
   }
-  private branchRows(chainId: Id): Branch[] {
-    console.log('[tree-debug] DemoDataSource.branchRows | enter', { chainId });
-    debugger;
-    console.log(
-      '[tree-debug] DemoDataSource.branchRows | return this.branches .filter((branch) => branch.chainId === chainId) .map((branch) => ({ ...branch, ...this.counts(this.persons.filter((person) => per',
-    );
-    debugger;
-    return this.branches
-      .filter((branch) => {
-        console.log(
-          '[tree-debug] DemoDataSource.branchRows callback | evaluate branch.chainId === chainId',
-          { branch },
-        );
-        debugger;
-        return branch.chainId === chainId;
-      })
-      .map((branch) => {
-        console.log(
-          '[tree-debug] DemoDataSource.branchRows callback | evaluate ({ ...branch, ...this.counts(this.persons.filter((person) => person.branchId === branch.branchId)), })',
-          { branch },
-        );
-        debugger;
-        return {
-          ...branch,
-          ...this.counts(
-            this.persons.filter((person) => {
-              console.log(
-                '[tree-debug] DemoDataSource.branchRows callback callback | evaluate person.branchId === branch.branchId',
-                { person },
-              );
-              debugger;
-              return person.branchId === branch.branchId;
-            }),
-          ),
-        };
-      });
+
+  getBranches(chainId: string): Observable<BranchMembershipRecord[]> {
+    return this.respond(() => this.branchData.filter(branch => branch.chainId === chainId)
+      .map(branch => ({ ...branch, ...this.counts(this.employeeData.filter(person => person.branchId === branch.id)) })));
   }
-  private async respond<T>(value: T): Promise<T> {
-    console.log('[tree-debug] DemoDataSource.respond | enter', { value });
-    debugger;
-    console.log(
-      '[tree-debug] DemoDataSource.respond | const snapshot: T = JSON.parse(JSON.stringify(value));',
-    );
-    debugger;
-    const snapshot: T = JSON.parse(JSON.stringify(value));
-    console.log(
-      '[tree-debug] DemoDataSource.respond | await new Promise((resolve) => setTimeout(resolve, 150));',
-    );
-    debugger;
-    await new Promise((resolve) => {
-      console.log(
-        '[tree-debug] DemoDataSource.respond callback | evaluate setTimeout(resolve, 150)',
-        { resolve },
-      );
-      debugger;
-      return setTimeout(resolve, 150);
-    });
-    console.log('[tree-debug] DemoDataSource.respond | return snapshot;');
-    debugger;
-    return snapshot;
+
+  getEmployees(branchId: string): Observable<EmployeeMembershipRecord[]> {
+    return this.respond(() => this.employeeData.filter(person => person.branchId === branchId)
+      .map(person => ({ ...person, isProjectMember: this.members.has(this.personKey(person.branchId, person.id)) })));
   }
-  getChains(_projectId: Id): Promise<Chain[]> {
-    console.log('[tree-debug] DemoDataSource.getChains | enter', { _projectId });
-    debugger;
-    console.log('[tree-debug] DemoDataSource.getChains | return this.respond(this.chainRows());');
-    debugger;
-    return this.respond(this.chainRows());
-  }
-  getBranches(_projectId: Id, chainId: Id): Promise<Branch[]> {
-    console.log('[tree-debug] DemoDataSource.getBranches | enter', { _projectId, chainId });
-    debugger;
-    console.log(
-      '[tree-debug] DemoDataSource.getBranches | return this.respond(this.branchRows(chainId));',
-    );
-    debugger;
-    return this.respond(this.branchRows(chainId));
-  }
-  getBranchPersons(_projectId: Id, branchId: Id): Promise<Person[]> {
-    console.log('[tree-debug] DemoDataSource.getBranchPersons | enter', { _projectId, branchId });
-    debugger;
-    console.log(
-      '[tree-debug] DemoDataSource.getBranchPersons | return this.respond(this.persons.filter((person) => person.branchId === branchId));',
-    );
-    debugger;
-    return this.respond(
-      this.persons.filter((person) => {
-        console.log(
-          '[tree-debug] DemoDataSource.getBranchPersons callback | evaluate person.branchId === branchId',
-          { person },
-        );
-        debugger;
-        return person.branchId === branchId;
-      }),
-    );
-  }
-  searchPersons(_projectId: Id, query: string, maxCount: number): Promise<SearchRow[]> {
-    console.log('[tree-debug] DemoDataSource.searchPersons | enter', {
-      _projectId,
-      query,
-      maxCount,
-    });
-    debugger;
-    console.log('[tree-debug] DemoDataSource.searchPersons | const rows: SearchRow[] = [];');
-    debugger;
-    const rows: SearchRow[] = [];
-    console.log(
-      '[tree-debug] DemoDataSource.searchPersons | for (const chain of this.chains) for (const branch of this.branches) { if (branch.chainId !== chain.chainId) continue; for (const person of this.perso',
-    );
-    debugger;
-    for (const chain of this.chains) {
-      console.log(
-        '[tree-debug] DemoDataSource.searchPersons | for (const branch of this.branches) { if (branch.chainId !== chain.chainId) continue; for (const person of this.persons) { if ( person.branchId === br',
-      );
-      debugger;
-      for (const branch of this.branches) {
-        console.log(
-          '[tree-debug] DemoDataSource.searchPersons | if (branch.chainId !== chain.chainId) continue;',
-        );
-        debugger;
-        if (branch.chainId !== chain.chainId) {
-          console.log('[tree-debug] DemoDataSource.searchPersons | continue;');
-          debugger;
-          continue;
-        }
-        console.log(
-          '[tree-debug] DemoDataSource.searchPersons | for (const person of this.persons) { if ( person.branchId === branch.branchId && person.label.toLowerCase().includes(query.toLowerCase()) ) rows.push(',
-        );
-        debugger;
-        for (const person of this.persons) {
-          console.log(
-            '[tree-debug] DemoDataSource.searchPersons | if ( person.branchId === branch.branchId && person.label.toLowerCase().includes(query.toLowerCase()) ) rows.push({ chain, branch, person });',
-          );
-          debugger;
-          if (
-            person.branchId === branch.branchId &&
-            person.label.toLowerCase().includes(query.toLowerCase())
-          ) {
-            console.log(
-              '[tree-debug] DemoDataSource.searchPersons | rows.push({ chain, branch, person });',
-            );
-            debugger;
-            rows.push({ chain, branch, person });
+
+  searchEmployees(searchTerm: string, maxCount: number): Observable<EmployeeSearchResponse> {
+    return this.respond(() => {
+      const term = searchTerm.trim().toLowerCase();
+      const limit = Math.max(0, Math.floor(maxCount));
+      const results: FakeSearchResult[] = [];
+      if (!term) return { results, hasTooManyResults: false };
+      const branches = new Map<string, BranchRecord[]>();
+      const employees = new Map<string, EmployeeRecord[]>();
+      for (const branch of this.branchData) {
+        const group = branches.get(branch.chainId) ?? [];
+        group.push(branch); branches.set(branch.chainId, group);
+      }
+      for (const employee of this.employeeData) {
+        const group = employees.get(employee.branchId) ?? [];
+        group.push(employee); employees.set(employee.branchId, group);
+      }
+      // Same chain, branch and employee order as the listing endpoints.
+      for (const chain of this.chainData) {
+        for (const branch of branches.get(chain.id) ?? []) {
+          for (const person of employees.get(branch.id) ?? []) {
+            if (!person.name.toLowerCase().includes(term)) continue;
+            if (results.length === limit) return { results, hasTooManyResults: true };
+            results.push({
+              person: { id: person.id, name: person.name },
+              branch: { id: branch.id, name: branch.name }, chain: { ...chain },
+              isProjectMember: this.members.has(this.personKey(branch.id, person.id)),
+            });
           }
         }
       }
-    }
-    console.log(
-      '[tree-debug] DemoDataSource.searchPersons | return this.respond(rows.slice(0, maxCount));',
-    );
-    debugger;
-    return this.respond(rows.slice(0, maxCount));
+      return { results, hasTooManyResults: false };
+    });
   }
-  private mutationResult(branchId: Id): MutationResult {
-    console.log('[tree-debug] DemoDataSource.mutationResult | enter', { branchId });
-    debugger;
-    console.log(
-      '[tree-debug] DemoDataSource.mutationResult | const branch = this.branches.find((branch) => branch.branchId === branchId)!;',
-    );
-    debugger;
-    const branch = this.branches.find((branch) => {
-      console.log(
-        '[tree-debug] DemoDataSource.mutationResult callback | evaluate branch.branchId === branchId',
-        { branch },
-      );
-      debugger;
-      return branch.branchId === branchId;
-    })!;
-    console.log(
-      '[tree-debug] DemoDataSource.mutationResult | return { chain: this.chainRows().find((chain) => chain.chainId === branch.chainId)!, branch: this.branchRows(branch.chainId).find((row) => row.branchI',
-    );
-    debugger;
+
+  setPersonMembership(branchId: string, employeeId: string, isProjectMember: boolean): Observable<MembershipResponse> {
+    return this.respond(() => {
+      if (!this.employeeData.some(person => person.branchId === branchId && person.id === employeeId)) {
+        throw new Error('This person is no longer in the branch.');
+      }
+      this.setMember(branchId, employeeId, isProjectMember);
+      return { ...this.membershipResponse(branchId, isProjectMember), employeeId };
+    });
+  }
+
+  setBranchMembership(branchId: string, isProjectMember: boolean): Observable<MembershipResponse> {
+    return this.respond(() => {
+      if (!this.branchData.some(branch => branch.id === branchId)) throw new Error('Branch not found.');
+      for (const person of this.employeeData) {
+        if (person.branchId === branchId) this.setMember(branchId, person.id, isProjectMember);
+      }
+      return this.membershipResponse(branchId, isProjectMember);
+    });
+  }
+
+  private membershipResponse(branchId: string, isProjectMember: boolean): MembershipResponse {
+    const branch = this.branchData.find(item => item.id === branchId)!;
     return {
-      chain: this.chainRows().find((chain) => {
-        console.log(
-          '[tree-debug] DemoDataSource.mutationResult callback | evaluate chain.chainId === branch.chainId',
-          { chain },
-        );
-        debugger;
-        return chain.chainId === branch.chainId;
-      })!,
-      branch: this.branchRows(branch.chainId).find((row) => {
-        console.log(
-          '[tree-debug] DemoDataSource.mutationResult callback | evaluate row.branchId === branchId',
-          { row },
-        );
-        debugger;
-        return row.branchId === branchId;
-      })!,
+      branchId, isProjectMember,
+      branch: { id: branchId, ...this.counts(this.employeeData.filter(person => person.branchId === branchId)) },
+      chain: { id: branch.chainId, ...this.chainCounts(branch.chainId) },
     };
   }
-  togglePersonMembership(_projectId: Id, branchId: Id, employeeId: Id): Promise<MutationResult> {
-    console.log('[tree-debug] DemoDataSource.togglePersonMembership | enter', {
-      _projectId,
-      branchId,
-      employeeId,
-    });
-    debugger;
-    console.log(
-      '[tree-debug] DemoDataSource.togglePersonMembership | const person = this.persons.find( (person) => person.branchId === branchId && person.employeeId === employeeId, )!;',
-    );
-    debugger;
-    const person = this.persons.find((person) => {
-      console.log(
-        '[tree-debug] DemoDataSource.togglePersonMembership callback | evaluate person.branchId === branchId && person.employeeId === employeeId',
-        { person },
-      );
-      debugger;
-      return person.branchId === branchId && person.employeeId === employeeId;
-    })!;
-    console.log(
-      '[tree-debug] DemoDataSource.togglePersonMembership | person.isProjectMember = !person.isProjectMember;',
-    );
-    debugger;
-    person.isProjectMember = !person.isProjectMember;
-    console.log(
-      '[tree-debug] DemoDataSource.togglePersonMembership | return this.respond(this.mutationResult(branchId));',
-    );
-    debugger;
-    return this.respond(this.mutationResult(branchId));
+
+  private chainCounts(chainId: string): { members: number; total: number } {
+    const branchIds = new Set(this.branchData.filter(branch => branch.chainId === chainId).map(branch => branch.id));
+    return this.counts(this.employeeData.filter(person => branchIds.has(person.branchId)));
   }
-  updateBranchMembership(
-    _projectId: Id,
-    branchId: Id,
-    action: BranchAction,
-  ): Promise<MutationResult> {
-    console.log('[tree-debug] DemoDataSource.updateBranchMembership | enter', {
-      _projectId,
-      branchId,
-      action,
-    });
-    debugger;
-    console.log(
-      "[tree-debug] DemoDataSource.updateBranchMembership | for (const person of this.persons) if (person.branchId === branchId) person.isProjectMember = action !== 'removeAll';",
-    );
-    debugger;
-    for (const person of this.persons) {
-      console.log(
-        "[tree-debug] DemoDataSource.updateBranchMembership | if (person.branchId === branchId) person.isProjectMember = action !== 'removeAll';",
-      );
-      debugger;
-      if (person.branchId === branchId) {
-        console.log(
-          "[tree-debug] DemoDataSource.updateBranchMembership | person.isProjectMember = action !== 'removeAll';",
-        );
-        debugger;
-        person.isProjectMember = action !== 'removeAll';
-      }
-    }
-    console.log(
-      '[tree-debug] DemoDataSource.updateBranchMembership | return this.respond(this.mutationResult(branchId));',
-    );
-    debugger;
-    return this.respond(this.mutationResult(branchId));
+
+  private counts(people: EmployeeRecord[]): { members: number; total: number } {
+    return {
+      members: people.reduce((count, person) => count + Number(this.members.has(this.personKey(person.branchId, person.id))), 0),
+      total: people.length,
+    };
   }
+
+  private setMember(branchId: string, employeeId: string, selected: boolean): void {
+    const key = this.personKey(branchId, employeeId);
+    if (selected) this.members.add(key);
+    else this.members.delete(key);
+  }
+
+  private personKey(branchId: string, employeeId: string): string { return JSON.stringify([branchId, employeeId]); }
+
+  private readonly chainData: FakeDataShape[] = [
+    {
+      id: '10',
+      name: '10 Hovedkontor',
+    },
+    {
+      id: '20',
+      name: '20 Kjede ABC',
+    },
+    {
+      id: '30',
+      name: '30 Kjede XYZ',
+    },
+    {
+      id: '40',
+      name: '40 Lager',
+    },
+    {
+      id: '50',
+      name: '50 Transport',
+    },
+  ];
+
+  private readonly branchData: BranchRecord[] = [
+    // Chain 10
+    {
+      id: '1020',
+      chainId: '10',
+      name: '1020 Administrasjon',
+    },
+    {
+      id: '1030',
+      chainId: '10',
+      name: '1030 IT',
+    },
+    {
+      id: '1040',
+      chainId: '10',
+      name: '1040 HR',
+    },
+
+    // Chain 20
+    {
+      id: '2010',
+      chainId: '20',
+      name: '2010 Oslo',
+    },
+    {
+      id: '2020',
+      chainId: '20',
+      name: '2020 Bergen',
+    },
+
+    // Chain 30
+    {
+      id: '3010',
+      chainId: '30',
+      name: '3010 Trondheim',
+    },
+    {
+      id: '3020',
+      chainId: '30',
+      name: '3020 Stavanger',
+    },
+
+    // Chain 40
+    {
+      id: '4010',
+      chainId: '40',
+      name: '4010 Lager Øst',
+    },
+    {
+      id: '4020',
+      chainId: '40',
+      name: '4020 Lager Vest',
+    },
+
+    // Chain 50
+    {
+      id: '5010',
+      chainId: '50',
+      name: '5010 Transport Oslo',
+    },
+
+  ];
+
+  private readonly employeeData: EmployeeRecord[] = [
+    // 1020 Administrasjon
+    {
+      id: 'e1001',
+      branchId: '1020',
+      name: 'Olivia Rhye',
+    },
+    {
+      id: 'e1002',
+      branchId: '1020',
+      name: 'Emma Johnson',
+    },
+    {
+      id: 'e1003',
+      branchId: '1020',
+      name: 'Liam Anderson',
+    },
+
+    // 1030 IT
+    {
+      id: 'e2001',
+      branchId: '1030',
+      name: 'Olivia Rhye',
+    },
+    {
+      id: 'e2002',
+      branchId: '1030',
+      name: 'Noah Williams',
+    },
+    {
+      id: 'e2003',
+      branchId: '1030',
+      name: 'William Brown',
+    },
+    {
+      id: 'e2004',
+      branchId: '1030',
+      name: 'Sophia Davis',
+    },
+    {
+      id: 'e2005',
+      branchId: '1030',
+      name: 'James Miller',
+    },
+    {
+      id: 'e2006',
+      branchId: '1030',
+      name: 'Amelia Wilson',
+    },
+    {
+      id: 'e2007',
+      branchId: '1030',
+      name: 'Lucas Moore',
+    },
+    {
+      id: 'e2008',
+      branchId: '1030',
+      name: 'Mia Taylor',
+    },
+    {
+      id: 'e2009',
+      branchId: '1030',
+      name: 'Henry Thomas',
+    },
+    {
+      id: 'e2010',
+      branchId: '1030',
+      name: 'Ella Martin',
+    },
+
+    // 1040 HR
+    {
+      id: 'e3001',
+      branchId: '1040',
+      name: 'Ava Thompson',
+    },
+    {
+      id: 'e3002',
+      branchId: '1040',
+      name: 'Ethan Garcia',
+    },
+
+    // 2010 Oslo
+    {
+      id: 'e4001',
+      branchId: '2010',
+      name: 'Isabella Martinez',
+    },
+    {
+      id: 'e4002',
+      branchId: '2010',
+      name: 'Oliver Robinson',
+    },
+
+    // 2020 Bergen
+    {
+      id: 'e5001',
+      branchId: '2020',
+      name: 'Charlotte Clark',
+    },
+    {
+      id: 'e5002',
+      branchId: '2020',
+      name: 'Benjamin Lewis',
+    },
+
+    // 3010 Trondheim
+    {
+      id: 'e6001',
+      branchId: '3010',
+      name: 'Evelyn Lee',
+    },
+    {
+      id: 'e6002',
+      branchId: '3010',
+      name: 'Daniel Walker',
+    },
+
+    // 3020 Stavanger
+    {
+      id: 'e7001',
+      branchId: '3020',
+      name: 'Harper Hall',
+    },
+
+    // 4010 Lager Øst
+    {
+      id: 'e8001',
+      branchId: '4010',
+      name: 'Alexander Allen',
+    },
+    {
+      id: 'e8002',
+      branchId: '4010',
+      name: 'Sofia Young',
+    },
+
+    // 4020 Lager Vest
+    {
+      id: 'e9001',
+      branchId: '4020',
+      name: 'Michael King',
+    },
+    {
+      id: 'e9002',
+      branchId: '4020',
+      name: 'Emily Wright',
+    },
+
+    // 5010 Transport
+    {
+      id: 'e10001',
+      branchId: '5010',
+      name: 'Daniel Scott',
+    },
+    {
+      id: 'e10002',
+      branchId: '5010',
+      name: 'Grace Green',
+    },
+
+  ];
 }

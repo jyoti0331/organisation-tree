@@ -1,50 +1,44 @@
-export type Loader<T> = (
-  node: TreeNode<T>,
-  signal: AbortSignal,
-) => Promise<readonly NodeInput<T>[]>;
-export interface NodeInput<T> {
-  data: T;
-  hasChildren?: boolean;
-  expanded?: boolean;
-  loader?: Loader<T> | null;
-  children?: readonly NodeInput<T>[];
+import { Observable } from 'rxjs';
+
+export enum TreeSelectionStatus {
+  FullySelected = 'FullySelected',
+  PartiallySelected = 'PartiallySelected',
+  NotSelected = 'NotSelected',
 }
-export class TreeNode<T> {
-  readonly children: TreeNode<T>[] = [];
-  expanded = false;
-  isLoaded = false;
-  loading = false;
-  error: string | null = null;
-  hasChildren = false;
-  loader: Loader<T> | null = null;
-  constructor(
-    readonly id: string,
-    public data: T,
-    readonly parent: TreeNode<T> | null,
-    public index: number,
-  ) {
-    console.log('[tree-debug] TreeNode.constructor | enter', { id, data, parent, index });
-    debugger;
-  }
+
+export interface NodeSelection {
+  selectionStatus: TreeSelectionStatus;
+  selectionAllowed: boolean;
+  showCheckbox: boolean;
 }
-export type CheckState = 'unchecked' | 'mixed' | 'checked';
-export interface TreeCheckbox {
-  state: CheckState;
-  disabled?: boolean;
-  label?: string;
+
+/** Rendering-independent: a row supplies this handle only while it exists. */
+export interface TreeRowHandle { focus(): void; }
+export interface TreeCounts { members: number; total: number; }
+export type TreeLoader = (nodeId: string, ...params: string[]) => Observable<TreeNode[]>;
+
+export interface TreeNode {
+  id: string;
+  label: string;
+  parent: TreeNode | null;
+  index: number;
+  isRoot: boolean;
+  children?: TreeNode[];
+  hasChildren: boolean;
+  expanded: boolean;
+  isLoaded: boolean;
+  lazyLoading: boolean;
+  lazyLoad: TreeLoader | null;
+  lazyLoadParams: string[];
+  loading: boolean;
+  pending: boolean;
+  row?: TreeRowHandle;
+  counts?: TreeCounts;
+  selectionProps: NodeSelection;
+  additionalInfo?: unknown;
+  description?: string;
+  error?: string;
+  mutationError?: string;
 }
-/** Payload interpretation and checkbox policy belong to the host. */
-export interface TreePresentation<T> {
-  label(node: TreeNode<T>): string;
-  checkbox?(node: TreeNode<T>): TreeCheckbox | null;
-  description?(node: TreeNode<T>): string | null;
-}
-export interface CheckboxToggle<T> {
-  node: TreeNode<T>;
-  checked: boolean;
-}
-/** Pass the token back unchanged to the helper that issued it. */
-export interface SearchRequestToken {
-  readonly revision: number;
-}
-export type SearchApplyResult = 'applied' | 'superseded' | 'data-changed';
+
+export interface TreeSelectionChange { node: TreeNode; }

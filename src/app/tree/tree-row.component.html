@@ -1,0 +1,25 @@
+<div #row class="tree-row" tabindex="0" [style.padding-left.px]="depth * 24 + 8"
+  [attr.aria-label]="node.label" [attr.aria-busy]="node.loading || node.pending || null"
+  (keydown)="onKeydown($event)">
+  <button *ngIf="node.hasChildren; else leafPlaceholder" class="disclosure" type="button"
+    [attr.aria-label]="(node.expanded ? 'Collapse ' : 'Expand ') + node.label"
+    [attr.aria-expanded]="node.expanded" (click)="expand.emit(node)">
+    {{ node.expanded ? 'v' : '>' }}
+  </button>
+  <ng-template #leafPlaceholder><span class="expand-placeholder" aria-hidden="true"></span></ng-template>
+  <ws-tri-state-checkbox *ngIf="node.selectionProps.showCheckbox; else plainLabel"
+    [label]="node.label" [status]="node.selectionProps.selectionStatus"
+    [disabled]="!node.selectionProps.selectionAllowed || node.pending" (activate)="onSelection()">
+  </ws-tri-state-checkbox>
+  <ng-template #plainLabel><span class="node-label">{{ node.label }}</span></ng-template>
+  <span class="count" *ngIf="node.description">{{ node.description }}</span>
+</div>
+<div *ngIf="node.loading" class="loading" role="status" [style.padding-left.px]="(depth + 2) * 24">
+  Loading...
+</div>
+<div *ngIf="node.error" class="error" role="status" [style.padding-left.px]="(depth + 2) * 24">
+  {{ node.error }} <button type="button" (click)="expand.emit(node)">Retry</button>
+</div>
+<div *ngIf="node.mutationError" class="error" role="status" [style.padding-left.px]="(depth + 2) * 24">
+  {{ node.mutationError }} <button type="button" [disabled]="node.pending" (click)="onSelection()">Retry membership change</button>
+</div>
