@@ -11,6 +11,8 @@ npm start
 npm run build
 ```
 
+For the complete data flow, file responsibilities and class-member reference, read the [developer guide](DEVELOPER_README.md). Keep that guide updated alongside future implementation changes.
+
 ## Host integration
 
 The tree knows only nodes, children, loaders, expansion and navigation. Your payload can be any type; no organisation IDs, backend interfaces, membership rules or fixed hierarchy levels are required.
