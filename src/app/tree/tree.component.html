@@ -12,7 +12,7 @@
       [attr.aria-expanded]="node.hasChildren ? node.expanded : null"
       [attr.aria-busy]="node.loading || null"
       [style.padding-left.px]="(level(node) - 1) * 22 + 8"
-      (focus)="activeId = node.id"
+      (focus)="onRowFocus(node)"
       (click)="focus(node)"
       (keydown)="onKeydown($event, node)"
     >

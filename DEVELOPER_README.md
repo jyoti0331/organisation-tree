@@ -4,6 +4,16 @@ This guide describes the current `feature/copy-paste-tree` implementation. Start
 
 **Maintenance rule:** whenever a later change affects files, public APIs, state ownership, data flow or behavior described here, update this guide in the same change. Update examples and diagrams too. Describe implemented behavior, and explicitly label any proposal that has not been implemented.
 
+## Local debugging instrumentation
+
+The current local working copy has intentionally verbose `console.log` and `debugger` statements throughout bootstrap, live-node construction, structural operations, loaders, subscriptions, rendering, keyboard/focus events, membership coordination, mock responses and external search. These debugging changes are intentionally uncommitted.
+
+Run `npm start` and open browser DevTools. Filter the Console for `[tree-debug]`; each entry identifies its class/method or callback and the operation about to execute. Entry logs include available parameters. A `debugger` statement follows each trace so you can inspect local variables, the call stack and state before stepping through the operation. Branch/loop traces show the path taken; frequent presentation and traversal traces are intentional. Logged objects are references, so inspect variables while paused if you need the exact state at that moment.
+
+`npm start` uses `demo:build:development`, with optimization disabled and source maps enabled. Production builds remain optimized and may remove debugger statements. To build inspectable output explicitly, run `npm run build -- --configuration development`. Restart an existing dev server after changing this configuration.
+
+Use DevTools' deactivate-breakpoints control when you want to run freely while retaining console output. Pausing can affect request deadlines and produce timeouts; this instrumentation is for understanding execution, not measuring normal performance. Remove these traces before release. No application behavior is intentionally changed apart from logging/pausing and routing the row focus binding through `onRowFocus()`.
+
 ## 1. Read this first
 
 There are three responsibilities:
@@ -147,6 +157,8 @@ Load cancellation prevents obsolete results from being inserted even when a tran
 | `toggleExpansion()`, `retryLoad()`                | Focus the row and invoke generic collapse/expand/load behavior.                                                                                                |
 | `onKeydown()`                                     | Up/Down traverse; Left collapses or moves to parent; Right expands or moves to first child; Home/End choose endpoints; Space requests a checkbox change.       |
 | `ngOnDestroy()`                                   | Unsubscribe only. The component does not dispose its host-owned helper.                                                                                        |
+
+`onRowFocus(node)` handles the template focus event, traces it and assigns `activeId`.
 
 The HTML renders a flat list with `tree`/`treeitem` roles, hierarchy metadata, expansion/busy attributes and node-level retry messages. Search controls and global messages are in the host template. `.count` is just a CSS class for generic secondary text; the component does no count calculation.
 

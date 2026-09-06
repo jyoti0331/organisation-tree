@@ -22,9 +22,11 @@ export class TreeNode<T> {
     public data: T,
     readonly parent: TreeNode<T> | null,
     public index: number,
-  ) {}
+  ) {
+    console.log('[tree-debug] TreeNode.constructor | enter', { id, data, parent, index });
+    debugger;
+  }
 }
-
 export type CheckState = 'unchecked' | 'mixed' | 'checked';
 export interface TreeCheckbox {
   state: CheckState;

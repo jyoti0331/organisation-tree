@@ -93,3 +93,5 @@ Checkboxes use `rgb(50, 150, 70)` with muted disabled states. Carets remain lite
 Tests run in a temporary workspace so this branch stays minimal. Checks cover generic payloads, traversal and lazy loading, search tokens, organisation regressions, keyboard/focus, concurrent writes, timeout recovery and 500-result rendering. Copied-source consumers are checked on Angular 15–22 using standalone and NgModule hosts, plus zoneless configurations in 18–22. These checks cover selected patch versions, not every dependency combination.
 
 The demo toolchain uses Angular 15 and Node 18. Consuming applications retain their own compatible dependencies. The packaged implementation remains on `feature/packaged-tree`; this version is on `feature/copy-paste-tree`. No npm publication is involved.
+
+Local debugging traces are currently enabled and intentionally uncommitted. `npm start` uses an unoptimized development build so DevTools can pause at the `debugger` statements. See [debugging instructions](DEVELOPER_README.md#local-debugging-instrumentation).
