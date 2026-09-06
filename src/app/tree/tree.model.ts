@@ -25,61 +25,24 @@ export class TreeNode<T> {
   ) {}
 }
 
-export type Id = string;
-export interface Counts {
-  members: number;
-  total: number;
-}
-export interface ChainIdentity {
-  chainId: Id;
-  label: string;
-}
-export interface BranchIdentity {
-  branchId: Id;
-  chainId: Id;
-  label: string;
-}
-export interface Chain extends ChainIdentity, Counts {}
-export interface Branch extends BranchIdentity, Counts {}
-export interface Person {
-  branchId: Id;
-  employeeId: Id;
-  label: string;
-  isProjectMember: boolean;
-}
-export interface SearchRow {
-  chain: ChainIdentity;
-  branch: BranchIdentity;
-  person: Person;
-}
-export interface MutationResult {
-  chain: Counts;
-  branch: Counts;
-}
-export type BranchAction = 'addAll' | 'addRemaining' | 'removeAll';
-/** Host supplies transport/authentication. Counts describe the full organisation, never search subsets. */
-export interface OrganisationDataSource {
-  getChains(projectId: Id): Promise<Chain[]>;
-  getBranches(projectId: Id, chainId: Id): Promise<Branch[]>;
-  getBranchPersons(projectId: Id, branchId: Id): Promise<Person[]>;
-  togglePersonMembership(projectId: Id, branchId: Id, employeeId: Id): Promise<MutationResult>;
-  updateBranchMembership(
-    projectId: Id,
-    branchId: Id,
-    action: BranchAction,
-  ): Promise<MutationResult>;
-}
-export type OrganisationNode =
-  | { kind: 'chain'; value: ChainIdentity & Partial<Counts> }
-  | { kind: 'branch'; value: BranchIdentity & Partial<Counts> }
-  | { kind: 'person'; value: Person };
 export type CheckState = 'unchecked' | 'mixed' | 'checked';
-export interface PickerOptions {
-  timeoutMs?: number;
+export interface TreeCheckbox {
+  state: CheckState;
+  disabled?: boolean;
+  label?: string;
 }
-
-/** Pass this token back unchanged; it belongs to one helper and one search request. */
+/** Payload interpretation and checkbox policy belong to the host. */
+export interface TreePresentation<T> {
+  label(node: TreeNode<T>): string;
+  checkbox?(node: TreeNode<T>): TreeCheckbox | null;
+  description?(node: TreeNode<T>): string | null;
+}
+export interface CheckboxToggle<T> {
+  node: TreeNode<T>;
+  checked: boolean;
+}
+/** Pass the token back unchanged to the helper that issued it. */
 export interface SearchRequestToken {
-  readonly membershipGeneration: number;
+  readonly revision: number;
 }
-export type SearchApplyResult = 'applied' | 'superseded' | 'membership-changed';
+export type SearchApplyResult = 'applied' | 'superseded' | 'data-changed';

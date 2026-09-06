@@ -6,6 +6,8 @@ import {
   Component,
   ElementRef,
   Input,
+  Output,
+  EventEmitter,
   NgZone,
   OnChanges,
   OnDestroy,
@@ -13,7 +15,7 @@ import {
   ViewChildren,
 } from '@angular/core';
 import { TreeHelper } from './tree.helper';
-import { OrganisationNode, TreeNode } from './tree.model';
+import { TreeNode, TreePresentation, CheckboxToggle } from './tree.model';
 
 @Component({
   selector: 'app-tree',
@@ -23,11 +25,14 @@ import { OrganisationNode, TreeNode } from './tree.model';
   templateUrl: './tree.component.html',
   styleUrls: ['./tree.component.scss'],
 })
-export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
-  @Input() helper: TreeHelper | null = null;
+export class TreeComponent<T> implements OnChanges, OnDestroy, AfterViewChecked {
+  @Input() helper: TreeHelper<T> | null = null;
+  @Input() label = 'Tree';
+  @Input() presentation: TreePresentation<T> = { label: (node) => String(node.data) };
+  @Output() checkboxToggle = new EventEmitter<CheckboxToggle<T>>();
   @ViewChildren('row') private rowElements!: QueryList<ElementRef<HTMLElement>>;
 
-  rows: TreeNode<OrganisationNode>[] = [];
+  rows: TreeNode<T>[] = [];
   activeId = '';
   private unsubscribe?: () => void;
   private pendingFocus = false;
@@ -64,11 +69,11 @@ export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
     this.changeDetector.markForCheck();
   }
 
-  trackNode(_index: number, node: TreeNode<OrganisationNode>): string {
+  trackNode(_index: number, node: TreeNode<T>): string {
     return node.id;
   }
 
-  level(node: TreeNode<OrganisationNode>): number {
+  level(node: TreeNode<T>): number {
     let level = 0;
     let parent = node.parent;
     while (parent) {
@@ -78,7 +83,7 @@ export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
     return level;
   }
 
-  focus(node: TreeNode<OrganisationNode>): void {
+  focus(node: TreeNode<T>): void {
     this.activeId = node.id;
     const element = this.rowElements?.find(
       (row) => row.nativeElement.dataset['nodeId'] === node.id,
@@ -99,31 +104,37 @@ export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
     }
   }
 
-  toggleMembership(event: MouseEvent, node: TreeNode<OrganisationNode>): void {
-    // Cancel the browser's checkbox toggle: only the confirmed API response changes it.
+  toggleCheckbox(event: MouseEvent, node: TreeNode<T>): void {
+    // The host owns checkbox state; emit intent without changing the payload.
     event.preventDefault();
     event.stopPropagation();
     this.focus(node);
-    void this.helper?.toggle(node);
+    this.requestToggle(node);
   }
 
-  toggleExpansion(event: Event, node: TreeNode<OrganisationNode>): void {
+  private requestToggle(node: TreeNode<T>): void {
+    const checkbox = this.presentation.checkbox?.(node);
+    if (checkbox && !checkbox.disabled)
+      this.checkboxToggle.emit({ node, checked: checkbox.state !== 'checked' });
+  }
+
+  toggleExpansion(event: Event, node: TreeNode<T>): void {
     event.stopPropagation();
     this.focus(node);
     if (node.expanded) this.helper?.tree.collapse(node);
     else void this.helper?.expand(node);
   }
 
-  retryLoad(event: Event, node: TreeNode<OrganisationNode>): void {
+  retryLoad(event: Event, node: TreeNode<T>): void {
     event.stopPropagation();
     this.focus(node);
     void this.helper?.expand(node);
   }
 
-  onKeydown(event: KeyboardEvent, node: TreeNode<OrganisationNode>): void {
+  onKeydown(event: KeyboardEvent, node: TreeNode<T>): void {
     if (!this.helper) return;
     const tree = this.helper.tree;
-    let target: TreeNode<OrganisationNode> | null = null;
+    let target: TreeNode<T> | null = null;
     switch (event.key) {
       case 'ArrowDown':
         target = tree.nextVisibleNode(node);
@@ -146,7 +157,7 @@ export class TreeComponent implements OnChanges, OnDestroy, AfterViewChecked {
         else target = node.parent === tree.root ? null : node.parent;
         break;
       case ' ':
-        void this.helper.toggle(node);
+        this.requestToggle(node);
         break;
       default:
         return;

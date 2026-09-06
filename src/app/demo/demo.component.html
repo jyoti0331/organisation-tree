@@ -17,7 +17,11 @@
       {{ searchError || helper.error }} <button type="button" (click)="refresh()">Refresh</button>
     </span>
   </div>
-  <app-tree [helper]="helper"></app-tree>
+  <app-tree
+    [helper]="helper.helper"
+    [presentation]="helper.presentation"
+    (checkboxToggle)="helper.toggle($event.node)"
+  ></app-tree>
   <p class="empty" *ngIf="!helper.initialLoading && !searching && !helper.tree.roots.length">
     {{ helper.isSearchMode ? 'No people found.' : 'No chains to display.' }}
   </p>

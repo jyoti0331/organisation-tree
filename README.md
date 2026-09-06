@@ -1,90 +1,93 @@
-# Organisation tree — copy-paste version
+# Generic tree — copy-paste version
 
-A minimal Angular application with five reusable tree files. The packaged version remains on `feature/packaged-tree`; this version is on `feature/copy-paste-tree`.
-
-## Run
+A minimal Angular demo with five reusable, domain-independent files in `src/app/tree`. Copy those files into your application and import the standalone `TreeComponent` (also supported in NgModule imports).
 
 ```sh
 nvm install
 nvm use
 npm ci
 npm start
+# Production build:
+npm run build
 ```
 
-Open http://127.0.0.1:4200. `npm run build` writes the production app to `dist/demo`. The demo uses Angular 15.2 and Node 18.20.8; copied source supports Angular 15–22.
+## Host integration
 
-## Copy into your application
-
-Copy all five files from `src/app/tree`:
-
-| File                  | Responsibility                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------ |
-| `tree.component.ts`   | Render subscriptions, expansion, checkbox events, keyboard navigation and focus      |
-| `tree.component.html` | Tree rows and node-level loading/retry feedback                                      |
-| `tree.component.scss` | Local tree styles, green checkboxes and carets                                       |
-| `tree.helper.ts`      | Tree state, lazy loading, membership coordination and external-result reconstruction |
-| `tree.model.ts`       | Node types, backend interface, options and search tokens                             |
-
-Import the standalone `TreeComponent` into your host component or NgModule. The host creates and owns the helper:
+The tree knows only nodes, children, loaders, expansion and navigation. Your payload can be any type; no organisation IDs, backend interfaces, membership rules or fixed hierarchy levels are required.
 
 ```ts
 import { TreeHelper } from './tree/tree.helper';
+import { CheckboxToggle, TreePresentation } from './tree/tree.model';
 
-// memberApi implements OrganisationDataSource from tree.model.ts.
-readonly helper = new TreeHelper(this.memberApi, this.projectId, { timeoutMs: 10_000 });
+type Item = { title: string; selected: boolean };
+readonly helper = new TreeHelper<Item>();
+readonly presentation: TreePresentation<Item> = {
+  label: node => node.data.title,
+  checkbox: node => ({ state: node.data.selected ? 'checked' : 'unchecked' }),
+};
 
-ngOnInit(): void { void this.helper.initialize(); }
+ngOnInit(): void {
+  this.helper.browsing.insertNodesAtRoot([
+    { data: { title: 'Documents', selected: false }, children: [
+      { data: { title: 'Notes', selected: false } },
+    ] },
+  ]);
+}
+
+onToggle({ node, checked }: CheckboxToggle<Item>): void {
+  node.data = { ...node.data, selected: checked };
+  this.helper.invalidateSearchResults();
+  this.helper.notify();
+}
+
 ngOnDestroy(): void { this.helper.dispose(); }
 ```
 
 ```html
-<app-tree [helper]="helper"></app-tree>
+<app-tree
+  [helper]="helper"
+  [presentation]="presentation"
+  label="Documents"
+  (checkboxToggle)="onToggle($event)"
+></app-tree>
 ```
 
-The renderer subscribes to helper changes but never initializes or disposes a supplied helper. To change projects, the host disposes the old helper and passes a new one. It owns all search controls, page-level status/error/empty messages, and refresh buttons. `src/app/demo` demonstrates this integration; do not copy the demo's mock backend into production.
+Omit `checkbox` for a tree without checkboxes, or return `null` for individual rows. A checkbox descriptor supports `unchecked`, `mixed`, `checked`, `disabled` and an accessible `label`. An optional `description(node)` supplies secondary text. Without a presentation, labels use `String(node.data)`.
 
-The five files use relative imports and Angular APIs only—no path aliases, package exports, application-specific services, global CSS or additional tree components. Zone-based and zoneless hosts retain their normal Angular providers.
+The component emits intended checkbox state; it never modifies your payload or calls your API. For asynchronous saves, the host supplies disabled state while pending, applies confirmed data, and calls `helper.notify()`. Host policy decides whether parent/child checkbox states are related.
+
+The host owns helper creation and disposal, including replacements. The component only subscribes and renders. Lazy nodes accept `loader(node, signal)` returning `NodeInput<T>[]`; the helper caches successful loads, deduplicates requests and ignores obsolete responses. Use `helper.browsing` for insertion/reconciliation and `helper.tree` for the currently displayed tree.
 
 ## External search
 
-The helper never calls a search API and does not store query text, debounce timers or result limits. Search is optional for hosts that only need browsing.
+Search controls, requests, grouping, limits, debounce and errors belong to the host:
 
 ```ts
 const token = helper.beginSearch();
-const rows = await memberApi.searchPersons(projectId, query, limit);
-const outcome = helper.applySearchResults(rows, token);
+const inputs = await loadSearchHierarchy(query); // NodeInput<Item>[]
+const result = helper.applySearchResults(inputs, token);
 ```
 
-`beginSearch()` enters search mode and clears previous results. `applySearchResults()` creates a complete, expanded tree from externally fetched rows using maps, preserving backend order. It returns:
+The helper installs an expanded, fully loaded hierarchy without interpreting payloads or calling a search API. Results return `applied`, `superseded`, or `data-changed`. Call `invalidateSearchResults()` when application data changes so outstanding snapshots return `data-changed`; fetch again with a new token. Tokens belong to one helper and are consumed once.
 
-- `applied`: the rows were installed. The token is consumed once.
-- `superseded`: the token is outdated, belongs to another helper, was already used, or the helper was disposed.
-- `membership-changed`: a membership write started or finished after the request began; the host should fetch fresh rows with a new token.
+When clearing search, invalidate host request callbacks and call `helper.restoreBrowsing()`. This immediately restores cached nodes, IDs and expansion. Any authoritative data refresh is the host's responsibility.
 
-The host must also ignore callbacks from superseded queries. The demo implements the complete sequence with a 300 ms debounce, a ten-second search timeout, a default cap of 300, and retries for membership invalidation. It slices results to the cap and displays “Result limit reached; refine your search” when the response reaches it. These are host choices, not renderer requirements.
+## Files and demo
 
-To clear search, invalidate the host's pending requests and call:
+| File                  | Responsibility                                                               |
+| --------------------- | ---------------------------------------------------------------------------- |
+| `tree.model.ts`       | Generic nodes, loaders, presentation, checkbox events and search tokens      |
+| `tree.helper.ts`      | Structure, lazy loading, traversal, notifications and temporary search trees |
+| `tree.component.ts`   | Rendering subscriptions, emitted actions, keyboard and focus                 |
+| `tree.component.html` | Rows and node-level retry feedback                                           |
+| `tree.component.scss` | Local styling, green native checkboxes and caret symbols                     |
 
-```ts
-await helper.restoreBrowsing();
-```
+The organisation example lives entirely in `src/app/demo`: its own types, data-source contract, membership controller, mock API and search grouping. It retains disabled chain checkboxes, branch actions, concurrent person writes, reconciliation and timeout recovery. Copy that application logic only if your application needs this particular membership behavior. Timed-out mutations are not retried automatically; a late server commit may require a later refresh.
 
-Browsing becomes visible immediately, with matching node IDs and expansion preserved. The returned promise covers any needed membership reconciliation. Search ancestors have no checkboxes or counts; people remain selectable.
+Checkboxes use `rgb(50, 150, 70)` with muted disabled states. Carets remain literal `>` / `v`, including while loading. One roving Tab stop, arrow keys, Home/End and Space support keyboard navigation. Search and page-level messages remain outside the tree.
 
-## Backend and interaction contract
+## Validation and branches
 
-`OrganisationDataSource` requires five promise-returning operations: get chains, get branches, get branch persons, toggle a person, and update a branch. The helper retains these calls for lazy loading and membership updates. A host can separately supply its own `searchPersons` method without making it part of the required interface.
+Tests run in a temporary workspace so this branch stays minimal. Checks cover generic payloads, traversal and lazy loading, search tokens, organisation regressions, keyboard/focus, concurrent writes, timeout recovery and 500-result rendering. Copied-source consumers are checked on Angular 15–22 using standalone and NgModule hosts, plus zoneless configurations in 18–22. These checks cover selected patch versions, not every dependency combination.
 
-IDs are strings. Branch IDs are unique across the organisation; a person is identified by `(branchId, employeeId)`. Browsing ancestor rows include full `members` and `total` counts. Search rows contain `{ chain, branch, person }` identities and person membership, with no ancestor counts required. Mutation results contain `{ chain: { members, total }, branch: { members, total } }`.
-
-Chain checkboxes are disabled information displays. Branch actions add all, add remaining, or remove all. Membership changes only after API success; conflicting controls are disabled while saving. Distinct operations may run concurrently, followed by authoritative reconciliation without rebuilding matching browsing nodes.
-
-Checkboxes use `rgb(50, 150, 70)`; disabled states retain that base color with reduced opacity. Collapsed nodes display `>` and expanded nodes display `v`, including during loading. Native checkbox semantics and forced-colors support are preserved. Tab enters the tree, arrows navigate, Space toggles membership, and Home/End jump between endpoints.
-
-A timed-out toggle may still commit on the server. It is never automatically retried. Reconciliation and explicit refresh recover known state, but a commit arriving after those reads needs a later refresh. Immediate certainty requires backend capabilities beyond this contract.
-
-## Validation
-
-Tests run in a temporary workspace to keep this branch minimal. Coverage includes external-search races and timeout recovery, helper ownership/disposal, checkbox states, concurrent writes, keyboard focus, 500-result rendering, and copied-source consumption in Angular 15–22 (standalone/NgModule, plus zoneless in 18–22). The fuller original test tooling remains on `feature/packaged-tree`.
-
-The Angular 15 development toolchain uses Node 18; consuming applications retain their own Angular dependencies and compatible Node toolchains. No npm publication is involved.
+The demo toolchain uses Angular 15 and Node 18. Consuming applications retain their own compatible dependencies. The packaged implementation remains on `feature/packaged-tree`; this version is on `feature/copy-paste-tree`. No npm publication is involved.

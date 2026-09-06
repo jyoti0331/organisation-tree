@@ -1,5 +1,5 @@
-<section *ngIf="helper as state" class="picker" aria-label="Project members">
-  <div role="tree" aria-label="Organisation members">
+<section *ngIf="helper as state" class="picker" [attr.aria-label]="label">
+  <div role="tree" [attr.aria-label]="label">
     <div
       #row
       *ngFor="let node of rows; trackBy: trackNode"
@@ -28,18 +28,18 @@
       </button>
 
       <input
-        *ngIf="!state.isSearchMode || node.data.kind === 'person'"
+        *ngIf="presentation.checkbox?.(node) as checkbox"
         type="checkbox"
         tabindex="-1"
-        [checked]="state.state(node) === 'checked'"
-        [indeterminate]="state.state(node) === 'mixed'"
-        [disabled]="state.disabled(node)"
-        [attr.aria-label]="'Project membership for ' + node.data.value.label"
-        (click)="toggleMembership($event, node)"
+        [checked]="checkbox.state === 'checked'"
+        [indeterminate]="checkbox.state === 'mixed'"
+        [disabled]="checkbox.disabled"
+        [attr.aria-label]="checkbox.label || presentation.label(node)"
+        (click)="toggleCheckbox($event, node)"
       />
-      <span class="node-label">{{ node.data.value.label }}</span>
-      <span class="count" *ngIf="!state.isSearchMode && node.data.kind !== 'person'">
-        {{ node.data.value.members }} / {{ node.data.value.total }}
+      <span class="node-label">{{ presentation.label(node) }}</span>
+      <span class="count" *ngIf="presentation.description?.(node) as description">
+        {{ description }}
       </span>
       <span *ngIf="node.error" class="error" role="status">
         {{ node.error }} <button type="button" (click)="retryLoad($event, node)">Retry</button>

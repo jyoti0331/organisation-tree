@@ -1,19 +1,4 @@
-import {
-  TreeNode,
-  NodeInput,
-  Id,
-  Counts,
-  Chain,
-  Branch,
-  OrganisationDataSource,
-  OrganisationNode,
-  CheckState,
-  PickerOptions,
-  MutationResult,
-  SearchRow,
-  SearchRequestToken,
-  SearchApplyResult,
-} from './tree.model';
+import { TreeNode, NodeInput, SearchRequestToken, SearchApplyResult } from './tree.model';
 
 let nextTree = 0;
 /** Rendering-independent ordered tree. Loaders return data; the tree owns insertion. */
@@ -204,397 +189,68 @@ export class Tree<T> {
   }
 }
 
-export function checkState(counts: Counts): CheckState {
-  return counts.total === 0 || counts.members === 0
-    ? 'unchecked'
-    : counts.members === counts.total
-      ? 'checked'
-      : 'mixed';
-}
-export const personKey = (branchId: Id, employeeId: Id): string =>
-  JSON.stringify([branchId, employeeId]);
-
-export class TreeHelper {
-  readonly browsing = new Tree<OrganisationNode>();
-  searchTree: Tree<OrganisationNode> | null = null;
-  private searchMode = false;
-  private activeSearch: SearchRequestToken | null = null;
-  refreshing = false;
-  initialLoading = false;
-  error: string | null = null;
-  readonly timeoutMs: number;
+/** Owns tree structure and temporary externally constructed search results, never payload policy. */
+export class TreeHelper<T> {
+  readonly browsing = new Tree<T>();
+  searchTree: Tree<T> | null = null;
   private listeners = new Set<() => void>();
-  private chains = new Map<Id, TreeNode<OrganisationNode>>();
-  private branches = new Map<Id, TreeNode<OrganisationNode>>();
-  private persons = new Map<string, Set<TreeNode<OrganisationNode>>>();
-  private branchWrites = new Set<Id>();
-  private personWrites = new Map<string, Id>();
-  private dirty = new Map<Id, Id>();
-  private generation = 0;
-  private reconcileGeneration = 0;
+  private activeSearch: SearchRequestToken | null = null;
+  private revision = 0;
   private disposed = false;
-  private offSearch?: () => void;
-  constructor(
-    readonly source: OrganisationDataSource,
-    readonly projectId: Id,
-    options: PickerOptions = {},
-  ) {
-    this.timeoutMs = options.timeoutMs ?? 10000;
-    this.browsing.subscribe(() => this.emit());
+  constructor() {
+    this.browsing.subscribe(() => this.notify());
   }
   get isSearchMode(): boolean {
-    return this.searchMode;
+    return this.searchTree !== null;
   }
-  get tree(): Tree<OrganisationNode> {
-    return this.isSearchMode ? (this.searchTree ?? this.emptySearch()) : this.browsing;
-  }
-  private emptySearch(): Tree<OrganisationNode> {
-    this.searchTree = new Tree();
-    this.offSearch = this.searchTree.subscribe(() => this.emit());
-    return this.searchTree;
+  get tree(): Tree<T> {
+    return this.searchTree ?? this.browsing;
   }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-  private emit(): void {
+  notify(): void {
     if (!this.disposed) for (const listener of this.listeners) listener();
   }
-  private async request<T>(promise: Promise<T>): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error('Request timed out. Refresh to confirm membership.')),
-            this.timeoutMs,
-          );
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
+  expand(node: TreeNode<T>): Promise<void> {
+    return this.tree.expand(node);
   }
-  private async stableRead<T>(read: () => Promise<T>): Promise<T> {
-    for (;;) {
-      const generation = this.generation;
-      const result = await this.request(read());
-      if (this.disposed || generation === this.generation) return result;
-    }
+  /** Call when host data changes during an outstanding search request. */
+  invalidateSearchResults(): void {
+    ++this.revision;
   }
-  private failure(error: unknown): void {
-    this.error = error instanceof Error ? error.message : String(error);
-  }
-  async initialize(): Promise<void> {
-    if (this.initialLoading || this.browsing.roots.length || this.disposed) return;
-    this.initialLoading = true;
-    this.error = null;
-    this.emit();
-    try {
-      const values = await this.stableRead(() => this.source.getChains(this.projectId));
-      if (this.disposed) return;
-      const nodes = this.browsing.insertNodesAtRoot(values.map((value) => this.chainInput(value)));
-      nodes.forEach((node) => {
-        if (node.data.kind === 'chain') this.chains.set(node.data.value.chainId, node);
-      });
-    } catch (error) {
-      this.failure(error);
-    } finally {
-      this.initialLoading = false;
-      this.emit();
-    }
-  }
-  private chainInput(value: Chain): NodeInput<OrganisationNode> {
-    return {
-      data: { kind: 'chain', value },
-      // Person totals do not tell us whether a chain contains empty branches.
-      hasChildren: true,
-      loader: async (_node, signal) => {
-        const rows = await this.stableRead(() =>
-          this.source.getBranches(this.projectId, value.chainId),
-        );
-        if (signal.aborted) return [];
-        return rows.map((branch) => this.branchInput(branch));
-      },
-    };
-  }
-  private branchInput(value: Branch): NodeInput<OrganisationNode> {
-    return {
-      data: { kind: 'branch', value },
-      hasChildren: value.total > 0,
-      loader: async (_node, signal) => {
-        const rows = await this.stableRead(() =>
-          this.source.getBranchPersons(this.projectId, value.branchId),
-        );
-        if (signal.aborted) return [];
-        return rows.map((person) => ({ data: { kind: 'person' as const, value: person } }));
-      },
-    };
-  }
-  private index(): void {
-    this.branches.clear();
-    this.persons.clear();
-    const walk = (nodes: readonly TreeNode<OrganisationNode>[], browse: boolean): void => {
-      for (const node of nodes) {
-        const data = node.data;
-        if (data.kind === 'branch' && browse) this.branches.set(data.value.branchId, node);
-        if (data.kind === 'person') {
-          const key = personKey(data.value.branchId, data.value.employeeId);
-          const nodes = this.persons.get(key) ?? new Set();
-          nodes.add(node);
-          this.persons.set(key, nodes);
-        }
-        walk(node.children, browse);
-      }
-    };
-    walk(this.browsing.roots, true);
-    if (this.searchTree) walk(this.searchTree.roots, false);
-  }
-  async expand(node: TreeNode<OrganisationNode>): Promise<void> {
-    await this.tree.expand(node);
-    this.index();
-    if (this.dirty.size && !this.pending) await this.refresh(false);
-  }
-  private get pending(): number {
-    return this.branchWrites.size + this.personWrites.size;
-  }
-  disabled(node: TreeNode<OrganisationNode>): boolean {
-    const data = node.data;
-    if (data.kind === 'chain') return true;
-    const branchId = data.value.branchId;
-    if (this.branchWrites.has(branchId)) return true;
-    if (data.kind === 'person')
-      return this.personWrites.has(personKey(branchId, data.value.employeeId));
-    return !data.value.total || [...this.personWrites.values()].includes(branchId);
-  }
-  state(node: TreeNode<OrganisationNode>): CheckState {
-    return node.data.kind === 'person'
-      ? node.data.value.isProjectMember
-        ? 'checked'
-        : 'unchecked'
-      : checkState({ members: node.data.value.members ?? 0, total: node.data.value.total ?? 0 });
-  }
-  async toggle(node: TreeNode<OrganisationNode>): Promise<void> {
-    if (
-      this.disposed ||
-      this.disabled(node) ||
-      node.data.kind === 'chain' ||
-      (this.isSearchMode && node.data.kind !== 'person')
-    )
-      return;
-    this.index();
-    const data = node.data;
-    const branchId = data.value.branchId;
-    const branch = this.branches.get(branchId)?.data;
-    const chainId =
-      data.kind === 'branch'
-        ? data.value.chainId
-        : branch?.kind === 'branch'
-          ? branch.value.chainId
-          : node.parent?.data.kind === 'branch'
-            ? node.parent.data.value.chainId
-            : null;
-    if (!chainId) return;
-    const key = data.kind === 'person' ? personKey(branchId, data.value.employeeId) : null;
-    if (key) this.personWrites.set(key, branchId);
-    else this.branchWrites.add(branchId);
-    this.dirty.set(branchId, chainId);
-    ++this.generation;
-    this.error = null;
-    this.emit();
-    const selected = this.state(node) === 'checked';
-    try {
-      const result = await this.request(
-        data.kind === 'person'
-          ? this.source.togglePersonMembership(this.projectId, branchId, data.value.employeeId)
-          : this.source.updateBranchMembership(
-              this.projectId,
-              branchId,
-              selected ? 'removeAll' : this.state(node) === 'mixed' ? 'addRemaining' : 'addAll',
-            ),
-      );
-      if (this.disposed) return;
-      this.index();
-      this.updateCounts(chainId, branchId, result);
-      for (const [personId, nodes] of this.persons)
-        for (const personNode of nodes)
-          if (
-            personNode.data.kind === 'person' &&
-            (key ? personId === key : personNode.data.value.branchId === branchId)
-          )
-            personNode.data = {
-              kind: 'person',
-              value: { ...personNode.data.value, isProjectMember: !selected },
-            };
-    } catch (error) {
-      this.failure(error);
-    } finally {
-      ++this.generation;
-      if (key) this.personWrites.delete(key);
-      else this.branchWrites.delete(branchId);
-      this.emit();
-      if (!this.pending && !this.disposed) await this.refresh(false);
-    }
-  }
-  private updateCounts(chainId: Id, branchId: Id, result: MutationResult): void {
-    const chainNode = this.chains.get(chainId);
-    if (chainNode?.data.kind === 'chain')
-      chainNode.data = { kind: 'chain', value: { ...chainNode.data.value, ...result.chain } };
-    const branchNode = this.branches.get(branchId);
-    if (branchNode?.data.kind === 'branch')
-      branchNode.data = { kind: 'branch', value: { ...branchNode.data.value, ...result.branch } };
-  }
-  /** Reconcile snapshots only across a write-free interval. No automatic toggle retries. */
-  async refresh(clearError = true): Promise<void> {
-    if (clearError) this.error = null;
-    if (this.disposed || this.pending) return;
-    const generation = this.generation;
-    const token = ++this.reconcileGeneration;
-    this.refreshing = true;
-    this.emit();
-    this.index();
-    const dirty = new Map(this.dirty);
-    if (!dirty.size) {
-      for (const node of this.branches.values())
-        if (node.data.kind === 'branch')
-          dirty.set(node.data.value.branchId, node.data.value.chainId);
-      for (const chain of this.searchTree?.roots ?? [])
-        for (const node of chain.children)
-          if (node.data.kind === 'branch')
-            dirty.set(node.data.value.branchId, node.data.value.chainId);
-    }
-    try {
-      const chains = await this.request(this.source.getChains(this.projectId));
-      const chainIds = new Set(dirty.values());
-      if (clearError)
-        for (const node of this.chains.values())
-          if (node.isLoaded && node.data.kind === 'chain') chainIds.add(node.data.value.chainId);
-      const branchGroups = await Promise.all(
-        [...chainIds].map(async (chainId) => ({
-          chainId,
-          rows: await this.request(this.source.getBranches(this.projectId, chainId)),
-        })),
-      );
-      const persons = await Promise.all(
-        [...dirty.keys()].map(async (branchId) => ({
-          branchId,
-          rows: await this.request(this.source.getBranchPersons(this.projectId, branchId)),
-        })),
-      );
-      if (
-        this.disposed ||
-        generation !== this.generation ||
-        token !== this.reconcileGeneration ||
-        this.pending
-      )
-        return;
-      this.browsing.reconcileChildren(
-        this.browsing.root,
-        chains.map((chain) => this.chainInput(chain)),
-        (data) => (data.kind === 'chain' ? data.value.chainId : ''),
-      );
-      this.chains.clear();
-      for (const node of this.browsing.roots)
-        if (node.data.kind === 'chain') this.chains.set(node.data.value.chainId, node);
-      for (const group of branchGroups) {
-        const node = this.chains.get(group.chainId);
-        if (node?.isLoaded)
-          this.browsing.reconcileChildren(
-            node,
-            group.rows.map((branch) => this.branchInput(branch)),
-            (data) => (data.kind === 'branch' ? data.value.branchId : ''),
-          );
-      }
-      this.index();
-      for (const group of persons) {
-        const branch = this.branches.get(group.branchId);
-        if (branch?.isLoaded)
-          this.browsing.reconcileChildren(
-            branch,
-            group.rows.map((value) => ({ data: { kind: 'person' as const, value } })),
-            (data) =>
-              data.kind === 'person' ? personKey(data.value.branchId, data.value.employeeId) : '',
-          );
-        const existing = new Map(
-          group.rows.map((person) => [personKey(person.branchId, person.employeeId), person]),
-        );
-        for (const [key, nodes] of this.persons) {
-          const value = existing.get(key);
-          if (value) for (const node of nodes) node.data = { kind: 'person', value: { ...value } };
-        }
-      }
-      this.index();
-      for (const branchId of dirty.keys()) this.dirty.delete(branchId);
-    } catch (error) {
-      this.failure(error);
-    } finally {
-      if (token === this.reconcileGeneration) {
-        this.refreshing = false;
-        this.emit();
-      }
-    }
-  }
-  /** The host fetches results; beginning a search invalidates earlier response tokens. */
   beginSearch(): SearchRequestToken {
     if (this.disposed) throw new Error('Cannot search a disposed tree helper');
-    this.searchMode = true;
-    this.offSearch?.();
     this.searchTree?.dispose();
-    this.emptySearch();
-    this.activeSearch = Object.freeze({ membershipGeneration: this.generation });
-    this.index();
-    this.emit();
+    this.searchTree = new Tree<T>();
+    this.searchTree.subscribe(() => this.notify());
+    this.activeSearch = Object.freeze({ revision: this.revision });
+    this.notify();
     return this.activeSearch;
   }
-
-  /** Build externally fetched rows in backend order without any search API calls. */
-  applySearchResults(rows: readonly SearchRow[], token: SearchRequestToken): SearchApplyResult {
-    if (this.disposed || !this.searchMode || token !== this.activeSearch) return 'superseded';
-    if (token.membershipGeneration !== this.generation) return 'membership-changed';
-    const chains = new Map<Id, NodeInput<OrganisationNode>>();
-    const branches = new Map<Id, NodeInput<OrganisationNode>>();
-    const people = new Set<string>();
-    for (const row of rows) {
-      let chain = chains.get(row.chain.chainId);
-      if (!chain) {
-        chain = { data: { kind: 'chain', value: row.chain }, expanded: true, children: [] };
-        chains.set(row.chain.chainId, chain);
-      }
-      let branch = branches.get(row.branch.branchId);
-      if (!branch) {
-        branch = { data: { kind: 'branch', value: row.branch }, expanded: true, children: [] };
-        branches.set(row.branch.branchId, branch);
-        (chain.children as NodeInput<OrganisationNode>[]).push(branch);
-      }
-      const key = personKey(row.person.branchId, row.person.employeeId);
-      if (!people.has(key)) {
-        people.add(key);
-        (branch.children as NodeInput<OrganisationNode>[]).push({
-          data: { kind: 'person', value: row.person },
-        });
-      }
-    }
-    this.searchTree!.replaceChildren(this.searchTree!.root, [...chains.values()]);
-    this.activeSearch = null; // A response token can only be consumed once.
-    this.index();
-    this.emit();
-    if (this.dirty.size && !this.pending) void this.refresh(false);
+  applySearchResults(
+    inputs: readonly NodeInput<T>[],
+    token: SearchRequestToken,
+  ): SearchApplyResult {
+    if (this.disposed || !this.searchTree || token !== this.activeSearch) return 'superseded';
+    if (token.revision !== this.revision) return 'data-changed';
+    const complete = (input: NodeInput<T>): NodeInput<T> => ({
+      data: input.data,
+      expanded: true,
+      loader: null,
+      children: (input.children ?? []).map(complete),
+    });
+    this.activeSearch = null;
+    this.searchTree.replaceChildren(this.searchTree.root, inputs.map(complete));
     return 'applied';
   }
-
-  /** Return immediately to cached browsing; reconcile outstanding membership if needed. */
-  async restoreBrowsing(): Promise<void> {
+  restoreBrowsing(): void {
     if (this.disposed) return;
     this.activeSearch = null;
-    this.searchMode = false;
-    this.offSearch?.();
-    this.offSearch = undefined;
     this.searchTree?.dispose();
     this.searchTree = null;
-    this.index();
-    this.emit();
-    if (this.dirty.size) await this.refresh(false);
+    this.notify();
   }
   dispose(): void {
     this.disposed = true;
